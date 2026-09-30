@@ -130,7 +130,7 @@
   function renderMain() {
     const main = $('main-body');
     const head = $('main-head');
-    if (app.mode === 'compare') { head.textContent = ''; head.style.display = 'none'; return; }
+    if (app.mode === 'compare') { head.textContent = ''; head.style.display = ''; head.appendChild(app.compareView.head); return; }
     head.style.display = '';
     const oldScroll = main.querySelector('.form-pane') ? main.querySelector('.form-pane').scrollTop : 0;
     head.textContent = '';
@@ -195,7 +195,7 @@
 
   app.setMode = function (m) {
     app.mode = m; updateMode();
-    if (m === 'compare') { document.body.classList.remove('sidebar-open'); $('compare-slot').style.display = ''; app.compareView.refresh(); }
+    if (m === 'compare') { document.body.classList.remove('sidebar-open'); $('compare-slot').style.display = ''; app.compareView.refresh(); renderMain(); }
     else { $('compare-slot').style.display = 'none'; renderAll(); if (app.view !== 'form') syncYamlToSelection(); }
     renderToolbar();
   };
@@ -338,7 +338,10 @@
     else if ((e.ctrlKey || e.metaKey) && !inText && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) && app.mode === 'edit') { e.preventDefault(); doRedo(); }
   });
   window.addEventListener('beforeunload', (e) => { if (app.project && (app.project.isDirty())) { e.preventDefault(); e.returnValue = ''; } });
-  window.addEventListener('resize', () => { if (app.mode === 'edit' && isNarrow() && app.view === 'split') { app.view = 'form'; renderMain(); } });
+  window.addEventListener('resize', () => {
+    if (app.mode === 'compare') app.compareView.onResize();
+    else if (app.mode === 'edit' && isNarrow() && app.view === 'split') { app.view = 'form'; renderMain(); }
+  });
 
   /* ---------- Arranque ---------- */
   app.start = function () {

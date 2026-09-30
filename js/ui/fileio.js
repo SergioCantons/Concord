@@ -53,6 +53,42 @@
     }
     return { files, skipped, folderName: withRel && arr[0] ? arr[0].webkitRelativePath.split('/')[0] : '' };
   }
+  /**
+   * Lee lo soltado con arrastrar y soltar. Con entradas del sistema de ficheros (webkitGetAsEntry) se recorren
+   * también carpetas conservando las rutas relativas; si no hay entradas, se usan los ficheros tal cual.
+   */
+  async function readDropped(entries, fileList) {
+    if (!entries || !entries.length) return readFileList(fileList || []);
+    const files = new Map();
+    const skipped = [];
+    const fileOf = (entry) => new Promise((res, rej) => entry.file(res, rej));
+    const readBatch = (reader) => new Promise((res, rej) => reader.readEntries(res, rej));
+    async function walk(entry, prefix) {
+      if (entry.isDirectory) {
+        if (SKIP_DIR.test(entry.name)) return;
+        const reader = entry.createReader();
+        for (let batch = await readBatch(reader); batch.length; batch = await readBatch(reader)) {
+          for (const child of batch) await walk(child, prefix + entry.name + '/');
+        }
+        return;
+      }
+      if (!YAML_RE.test(entry.name)) return;
+      const f = await fileOf(entry);
+      if (f.size > MAX_BYTES) { skipped.push(prefix + entry.name + ' (más de 8 MB)'); return; }
+      files.set(prefix + entry.name, await f.text());
+    }
+    // Una única carpeta soltada es el proyecto: sus rutas empiezan dentro de ella, como al abrir una carpeta.
+    const single = entries.length === 1 && entries[0].isDirectory ? entries[0] : null;
+    if (single) {
+      const reader = single.createReader();
+      for (let batch = await readBatch(reader); batch.length; batch = await readBatch(reader)) {
+        for (const child of batch) await walk(child, '');
+      }
+    } else {
+      for (const entry of entries) await walk(entry, '');
+    }
+    return { files, skipped, folderName: single ? single.name : '' };
+  }
   function pickViaInput(directory) {
     return new Promise((resolve) => {
       const inp = document.createElement('input');
@@ -179,5 +215,5 @@
   function loadRecovery() { try { const v = localStorage.getItem(REC_KEY); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function clearRecovery() { try { localStorage.removeItem(REC_KEY); } catch (e) { /* ignore */ } }
 
-  O.fileio = { hasFsAccess, safePath, openFolder, openLooseFiles, readFileList, detectRoots, dirIo, download, downloadText, downloadZip, addRecent, listRecents, removeRecent, recentPermission, openRecent, saveRecovery, loadRecovery, clearRecovery };
+  O.fileio = { hasFsAccess, safePath, openFolder, openLooseFiles, readFileList, readDropped, detectRoots, dirIo, download, downloadText, downloadZip, addRecent, listRecents, removeRecent, recentPermission, openRecent, saveRecovery, loadRecovery, clearRecovery };
 })();
