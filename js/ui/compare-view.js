@@ -5,10 +5,14 @@
   const { h, icon, iconBtn, btn, showMenu } = O.dom;
   const F = O.forms;
   const KIND = { added: ['+', 'Añadido'], removed: ['\u2212', 'Eliminado'], modified: ['~', 'Modificado'], renamed: ['\u21C4', 'Renombrado'], moved: ['\u2192', 'Movido'], error: ['!', 'Error'], unchanged: ['=', 'Sin cambios'] };
+  const hasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
 
   function create(app) {
     const el = h('div', { class: 'compare-view' });
     const S = app.cmp = app.cmp || { base: null, next: null, result: null, running: false, filters: { kinds: new Set(['added', 'removed', 'modified', 'renamed', 'moved', 'error']), breaking: 'all', q: '', tag: '', method: '', area: '' }, selId: null, view: 'changes', xMode: 'informative', textPair: {} };
+    // Un fichero soltado fuera de las tarjetas no debe hacer que el navegador lo abra y abandone la aplicación.
+    el.addEventListener('dragover', (e) => { if (!e.defaultPrevented && hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; } });
+    el.addEventListener('drop', (e) => { if (hasFiles(e)) e.preventDefault(); });
 
     function sourceCard(which, title) {
       const side = S[which];
@@ -19,20 +23,36 @@
         : h('div', { class: 'muted' }, 'Sin contrato seleccionado');
       card.appendChild(info);
       const actions = h('div', { class: 'row wrap' },
-        btn('Carpeta...', () => load(which, 'folder'), 'small', 'folder-open'),
-        btn('Archivos...', () => load(which, 'files'), 'small', 'file-up'),
+        btn('Carpeta...', () => load(which, O.fileio.openFolder), 'small', 'folder-open'),
+        btn('Archivos...', () => load(which, O.fileio.openLooseFiles), 'small', 'file-up'),
         btn('Contrato abierto', () => useCurrent(which), 'small', 'file-code'));
       if (app.settings.showExamples) actions.appendChild(btn('Ejemplo', (e) => showMenu(e.currentTarget, Object.keys(O.EXAMPLES).map((k) => ({ label: O.EXAMPLES[k].title, onClick: () => useExample(which, k) }))), 'small', 'archive'));
       card.appendChild(actions);
+      card.append(h('p', { class: 'cmp-drop-hint muted' }, icon('upload'), h('span', null, 'O arrastra aquí ficheros YAML/JSON')),
+        h('div', { class: 'cmp-drop', 'aria-hidden': 'true' }, icon('upload'), h('span', null, 'Suelta para usar como ' + title.toLowerCase())));
+      dropTarget(card, which);
       return card;
+    }
+    function dropTarget(card, which) {
+      let depth = 0;
+      const over = (on) => card.classList.toggle('drop-over', on);
+      card.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; over(true); });
+      card.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; over(true); });
+      card.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (!depth) over(false); });
+      card.addEventListener('drop', (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault(); depth = 0; over(false);
+        const files = Array.from(e.dataTransfer.files);
+        load(which, () => O.fileio.readFileList(files));
+      });
     }
     function describe(project, label) {
       const errors = project.refIndex().filter((r) => r.error).length + Array.from(project.files.values()).reduce((n, f) => n + f.errors.filter((e) => e.severity === 'error').length, 0);
       return { project, label, errors };
     }
-    async function load(which, how) {
+    async function load(which, read) {
       try {
-        const r = how === 'folder' ? await O.fileio.openFolder() : await O.fileio.openLooseFiles();
+        const r = await read();
         if (!r || !r.files.size) { if (r) app.toast('No se encontraron ficheros YAML/JSON', 'error'); return; }
         const root = await app.chooseRoot(r.files);
         if (!root) return;
