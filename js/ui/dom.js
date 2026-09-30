@@ -132,5 +132,80 @@
     return api.promise.then((v) => (v === '__ok__' ? input.value.trim() : null));
   }
 
-  O.dom = { h, clear, icon, iconBtn, btn, toast, showMenu, closeMenu, modal, confirmDialog, promptDialog };
+  /* ---------- Separadores redimensionables ---------- */
+  const LAYOUT_KEY = 'oat.layout.v1';
+  const layout = (() => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}') || {}; } catch (e) { return {}; } })();
+  const unitOf = (o) => (o.container ? '%' : 'px');
+  function applyLayoutVar(o, v) { document.documentElement.style.setProperty(o.varName, v + unitOf(o)); }
+  /** Restaura un tamaño guardado sin crear el separador (para aplicarlo antes del primer pintado). */
+  function restoreSize(o) { if (typeof layout[o.varName] === 'number') applyLayoutVar(o, layout[o.varName]); }
+  /**
+   * Crea un separador arrastrable que ajusta una variable CSS de :root y la recuerda en localStorage.
+   * o: { axis: 'x' (mueve a izquierda/derecha) | 'y', varName, def, min, max (número o función), invert (arrastrar
+   * hacia la izquierda/arriba agranda), container (función que devuelve el elemento de referencia: valores en %),
+   * measure (función con el tamaño actual cuando no hay uno guardado), label, className }.
+   * Teclado: flechas para ajustar, Inicio/Fin para mínimo/máximo; doble clic o Intro restauran el tamaño por defecto.
+   */
+  function splitter(o) {
+    const lim = (v) => (typeof v === 'function' ? v() : v);
+    const pct = !!o.container;
+    const el = h('div', { class: 'splitter splitter-' + o.axis + (o.className ? ' ' + o.className : ''), role: 'separator', tabindex: 0, 'aria-label': o.label, 'aria-orientation': o.axis === 'x' ? 'vertical' : 'horizontal', title: o.label + ' (doble clic: tamaño original)' });
+    // Sin tamaño guardado se parte del tamaño real (el CSS puede cambiarlo según el ancho de pantalla).
+    const current = () => (typeof layout[o.varName] === 'number' ? layout[o.varName] : (o.measure && o.measure()) || o.def);
+    function persist() { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch (e) { /* opcional */ } }
+    function aria(v) {
+      el.setAttribute('aria-valuenow', String(Math.round(v)));
+      el.setAttribute('aria-valuemin', String(Math.round(lim(o.min))));
+      el.setAttribute('aria-valuemax', String(Math.round(lim(o.max))));
+    }
+    function set(v, save) {
+      v = Math.round(Math.min(lim(o.max), Math.max(lim(o.min), v)) * 10) / 10;
+      layout[o.varName] = v;
+      applyLayoutVar(o, v);
+      aria(v);
+      if (save) persist();
+    }
+    /** Vuelve al tamaño definido en la hoja de estilos (que puede variar según el ancho de pantalla). */
+    function reset() { delete layout[o.varName]; document.documentElement.style.removeProperty(o.varName); aria(o.def); persist(); }
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const pos0 = o.axis === 'x' ? e.clientX : e.clientY;
+      const v0 = current();
+      const size = pct ? (o.axis === 'x' ? o.container().clientWidth : o.container().clientHeight) || 1 : 1;
+      document.body.classList.add('resizing', 'resizing-' + o.axis);
+      el.classList.add('dragging');
+      const move = (ev) => {
+        let d = (o.axis === 'x' ? ev.clientX : ev.clientY) - pos0;
+        if (o.invert) d = -d;
+        set(v0 + (pct ? (d / size) * 100 : d), false);
+      };
+      const up = () => {
+        el.removeEventListener('pointermove', move);
+        el.removeEventListener('pointerup', up);
+        el.removeEventListener('pointercancel', up);
+        document.body.classList.remove('resizing', 'resizing-' + o.axis);
+        el.classList.remove('dragging');
+        set(current(), true);
+      };
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+    });
+    el.addEventListener('dblclick', reset);
+    el.addEventListener('keydown', (e) => {
+      const step = (pct ? 2 : 16) * (e.shiftKey ? 3 : 1);
+      const grow = o.axis === 'x' ? { ArrowRight: 1, ArrowLeft: -1 } : { ArrowDown: 1, ArrowUp: -1 };
+      if (e.key in grow) { e.preventDefault(); set(current() + grow[e.key] * step * (o.invert ? -1 : 1), true); }
+      else if (e.key === 'Home') { e.preventDefault(); set(lim(o.min), true); }
+      else if (e.key === 'End') { e.preventDefault(); set(lim(o.max), true); }
+      else if (e.key === 'Enter') { e.preventDefault(); reset(); }
+    });
+    aria(current());
+    restoreSize(o);
+    return el;
+  }
+
+  O.dom = { h, clear, icon, iconBtn, btn, toast, showMenu, closeMenu, modal, confirmDialog, promptDialog, splitter, restoreSize };
 })();

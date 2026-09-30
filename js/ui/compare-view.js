@@ -144,9 +144,12 @@
       if (view === 'yaml') { content.appendChild(both ? textDiff() : emptyState('Elige el contrato base y el comparado para ver el diff textual por fichero.')); return; }
       if (view === 'form') { content.appendChild(S.result ? semantic() : emptyState(both ? 'Pulsa «Comparar» para ver las diferencias semánticas.' : 'Elige el contrato base y el comparado para ver las diferencias semánticas.')); return; }
       if (!both) { content.appendChild(emptyState('Elige el contrato base y el comparado para ver las diferencias semánticas y el diff textual.')); return; }
-      content.appendChild(h('div', { class: 'cmp-split' },
-        h('section', { class: 'cmp-pane', 'aria-label': 'Cambios semánticos' }, S.result ? semantic() : h('p', { class: 'muted pad' }, 'Pulsa «Comparar» para ver los cambios semánticos.')),
-        h('section', { class: 'cmp-pane', 'aria-label': 'Diff textual por fichero' }, textDiff())));
+      const split = h('div', { class: 'cmp-split' });
+      const left = h('section', { class: 'cmp-pane', 'aria-label': 'Cambios semánticos' }, S.result ? semantic() : h('p', { class: 'muted pad' }, 'Pulsa «Comparar» para ver los cambios semánticos.'));
+      split.append(left,
+        O.dom.splitter({ axis: 'x', varName: '--cmp-split', def: 50, min: 25, max: 75, container: () => split, measure: () => (left.offsetWidth / (split.clientWidth || 1)) * 100, label: 'Redimensionar cambios semánticos y diff textual' }),
+        h('section', { class: 'cmp-pane', 'aria-label': 'Diff textual por fichero' }, textDiff()));
+      content.appendChild(split);
     }
 
     function semantic() {
@@ -202,7 +205,10 @@
           tree.appendChild(row);
         });
       }
-      body.append(tree, detail(list));
+      body.append(tree,
+        O.dom.splitter({ axis: 'x', varName: '--cmp-tree', def: 43, min: 20, max: 75, container: () => body, measure: () => (tree.offsetWidth / (body.clientWidth || 1)) * 100, label: 'Redimensionar lista de cambios' }),
+        O.dom.splitter({ axis: 'y', varName: '--cmp-tree-h', def: 300, min: 120, max: () => window.innerHeight * 0.8, measure: () => tree.offsetHeight, label: 'Redimensionar altura de la lista de cambios' }),
+        detail(list));
     }
     function yamlOf(v) { if (v === undefined) return '(sin valor)'; try { return O.vendor.YAML.stringify(v, { lineWidth: 0 }).trimEnd(); } catch (e) { return String(v); } }
     function detail(list) {

@@ -147,6 +147,7 @@
       catch (e) { console.error(e); pane.appendChild(h('div', { class: 'callout error' }, icon('alert-circle'), h('span', null, 'No se pudo mostrar este elemento: ' + e.message))); }
       main.appendChild(pane);
       pane.scrollTop = oldScroll;
+      if (wantYaml) main.appendChild(O.dom.splitter({ axis: 'x', varName: '--split-form', def: 50, min: 20, max: 80, container: () => main, measure: () => (pane.offsetWidth / (main.clientWidth || 1)) * 100, label: 'Redimensionar formulario y YAML' }));
     }
     if (wantYaml) {
       if (app.sel.kind === 'file') {
@@ -365,6 +366,8 @@
     app.compareView = O.compareView.create(app);
     $('sidebar-slot').appendChild(app.explorer.el);
     $('validation-slot').appendChild(app.validationPanel.el);
+    $('sidebar-slot').appendChild(O.dom.splitter({ axis: 'x', varName: '--sidebar-w', def: 330, min: 220, max: () => Math.max(260, window.innerWidth * 0.6), measure: () => $('sidebar-slot').offsetWidth, label: 'Redimensionar explorador' }));
+    $('validation-slot').appendChild(O.dom.splitter({ axis: 'y', varName: '--val-h', def: 220, min: 90, max: () => Math.max(140, window.innerHeight * 0.7), invert: true, measure: () => app.validationPanel.el.offsetHeight, label: 'Redimensionar panel de validación' }));
     $('compare-slot').appendChild(app.compareView.el);
     $('compare-slot').style.display = 'none';
     $('scrim').addEventListener('click', () => document.body.classList.remove('sidebar-open'));
