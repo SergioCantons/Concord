@@ -1,7 +1,6 @@
 # Editor y comparador de contratos OpenAPI
 
-Herramienta local (HTML + CSS + JavaScript, sin framework, sin servidor y sin red) para editar, validar, guardar (documento único o fragments) y comparar semánticamente contratos OpenAPI 3.0.x en YAML. Los requisitos de partida están en [requisitos-herramienta-editor-comparador-openapi.md](requisitos-herramienta-editor-comparador-openapi.md).
-
+Herramienta local (HTML + CSS + JavaScript, sin framework, sin servidor y sin red) para editar, validar, guardar (documento único o fragments) y comparar semánticamente contratos OpenAPI 3.0.x en YAML.
 ## Uso (usuario final)
 
 1. Descomprime o copia la carpeta del proyecto.
