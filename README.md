@@ -49,7 +49,7 @@ Tamaño del código empaquetado: `vendor/oat-vendor.js` ≈ 327 KB (minificado) 
 - No hay llamadas de red: ni al abrir, ni al validar, ni al comparar. Las referencias `$ref` remotas (`http://`, `https://`) están siempre deshabilitadas y se reportan como error accionable. No hay telemetría ni IA.
 - Los contratos no salen del equipo. Datos que el navegador guarda localmente:
   - Preferencias de validación en `localStorage`.
-  - Carpetas recientes en IndexedDB (solo el identificador de carpeta, no su contenido).
+  - Contratos recientes (carpetas y ficheros sueltos, hasta 8) en IndexedDB: solo los identificadores que da el navegador, no su contenido. Se pueden vaciar desde el propio menú de recientes.
   - Recuperación de sesión: **desactivada por defecto**; si se activa en ajustes, copia el contenido de los ficheros en `localStorage` mientras hay cambios sin guardar.
 - Las rutas de `$ref` se resuelven dentro de la carpeta del proyecto; las que salen de ella o son absolutas se marcan como error. La escritura rechaza rutas con `..`, absolutas, con unidad (`C:`) o dentro de `.oat-backup/`.
 
@@ -57,7 +57,7 @@ Tamaño del código empaquetado: `vendor/oat-vendor.js` ≈ 327 KB (minificado) 
 
 - Con navegadores Chromium (Chrome, Edge) se usa la API File System Access: al abrir una carpeta se concede permiso de lectura y escritura a esa carpeta, y se puede guardar directamente en disco. Esa API puede no estar disponible o exigir contexto seguro en otros navegadores.
 - Sin esa API (p. ej. Firefox) se abre la carpeta/ficheros mediante selector de ficheros (solo lectura). El guardado se hace descargando un **ZIP** (o un único YAML si el resultado es un solo fichero); hay que extraerlo manualmente. No se puede sobrescribir en disco en ese modo.
-- Los permisos de carpetas recientes pueden pedirse de nuevo al reabrirlas.
+- Los contratos recientes solo existen con esa API (Chromium). Aparecen en el menú de abrir y en el botón **Recientes** de cada tarjeta del comparador. Al reabrirlos puede que el navegador vuelva a pedir permiso (escritura para carpetas y lectura para ficheros). Si ya no existen, se quitan de la lista. Lo que se suelta arrastrando no se guarda en recientes.
 - Solo se leen `.yaml`, `.yml` y `.json` de hasta 8 MB por fichero; se omiten `node_modules`, `.git`, `.oat-backup`, `.svn`, `.idea` y `.vscode`.
 - Al escribir se valida el nombre para Windows (caracteres y nombres reservados).
 

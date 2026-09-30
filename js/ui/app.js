@@ -245,7 +245,7 @@
     if (app.yaml) app.yaml.show(project.rootFile);
     if (app.mode !== 'edit') app.setMode('edit'); else renderAll();
     app.validate(true);
-    if (o.folder && o.folder.handle) O.fileio.addRecent(o.folder.handle, project.rootFile, project.name);
+    if (o.recent) O.fileio.addRecent(Object.assign({ rootFile: project.rootFile, name: project.name }, o.recent));
   };
   function openExample(key) {
     const ex = O.EXAMPLES[key];
@@ -271,7 +271,7 @@
     if (!root) return;
     const proj = Project.fromFiles(r.files, root, r.folderName || O.util.basename(root).replace(/\.(ya?ml|json)$/i, ''));
     const folder = r.handle ? { handle: r.handle, name: r.folderName } : null;
-    app.loadProject(proj, { folder, saved: true });
+    app.loadProject(proj, { folder, saved: true, recent: app.recentEntry(r) });
     if (r.skipped && r.skipped.length) toast('Se omitieron ' + r.skipped.length + ' fichero(s) demasiado grandes', 'info');
     if (!folder) toast('Este navegador no permite escribir en carpetas: al guardar se descargará un ZIP.', 'info', 5000);
   }
@@ -288,17 +288,31 @@
       { label: O.fileio.hasFsAccess ? 'Abrir carpeta del contrato...' : 'Abrir carpeta (solo lectura)...', icon: 'folder-open', onClick: () => guarded(openFolderFlow) },
       { label: 'Abrir fichero(s) YAML...', icon: 'file-up', onClick: () => guarded(openFilesFlow) }
     ];
-    const recents = O.fileio.hasFsAccess ? await O.fileio.listRecents() : [];
-    if (recents.length) {
-      items.push({ separator: true }, { header: 'Recientes' });
-      for (const rec of recents) {
-        const perm = await O.fileio.recentPermission(rec);
-        items.push({ label: rec.name, icon: 'history', hint: perm === 'granted' ? '' : 'pide permiso', onClick: () => guarded(async () => { app.busy(true); try { const r = await O.fileio.openRecent(rec); await openFromResult(Object.assign(r, { folderName: rec.handle.name })); } catch (e) { toast(e.message, 'error'); } finally { app.busy(false); } }) });
-      }
-    }
+    const recents = await app.recentMenuItems((rec) => guarded(async () => { app.busy(true); try { await openFromResult(await O.fileio.openRecent(rec)); } catch (e) { toast(e.message, 'error'); } finally { app.busy(false); } }));
+    if (recents.length) items.push({ separator: true }, ...recents);
     if (app.settings.showExamples) items.push({ separator: true }, { header: 'Ejemplos' }, ...app.exampleMenuItems());
     showMenu(anchor, items);
   }
+  /** Datos para recordar lo abierto en recientes: la carpeta o los ficheros sueltos elegidos con File System Access. */
+  app.recentEntry = function (r) {
+    if (r && r.handle) return { kind: 'folder', handle: r.handle };
+    if (r && r.fileHandles && r.fileHandles.length) return { kind: 'files', handles: r.fileHandles };
+    return null;
+  };
+  /** Entradas de menú con los contratos recientes (carpetas y ficheros). `opts.empty` añade un aviso si no hay ninguno. */
+  app.recentMenuItems = async function (onPick, opts) {
+    const recents = O.fileio.hasFsAccess ? await O.fileio.listRecents() : [];
+    if (!recents.length) return opts && opts.empty ? [{ header: 'Recientes' }, { label: O.fileio.hasFsAccess ? 'Aún no hay contratos recientes' : 'Este navegador no permite recordar ficheros', icon: 'history', disabled: true }] : [];
+    const items = [{ header: 'Recientes' }];
+    for (const rec of recents) {
+      const perm = await O.fileio.recentPermission(rec);
+      const files = O.fileio.recentKind(rec) === 'files';
+      const label = files ? rec.rootFile + (rec.handles.length > 1 ? ' (+' + (rec.handles.length - 1) + ')' : '') : rec.name;
+      items.push({ label, icon: files ? 'file' : 'folder', hint: perm === 'granted' ? (files ? 'ficheros' : 'carpeta') : 'pide permiso', onClick: () => onPick(rec) });
+    }
+    items.push({ label: 'Vaciar recientes', icon: 'trash-2', onClick: async () => { await O.fileio.clearRecents(); toast('Lista de recientes vaciada', 'ok'); } });
+    return items;
+  };
   /** Ejecuta la acción tras confirmar qué hacer con los cambios sin guardar. */
   async function guarded(action) {
     if (app.yaml) app.yaml.flush();
