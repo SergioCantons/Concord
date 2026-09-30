@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Editor OpenAPI</title>
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+  <script>
+    (() => {
+      const systemTheme = () => matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      try {
+        const settings = JSON.parse(localStorage.getItem('oat.settings.v1') || '{}');
+        const theme = ['light', 'dark', 'system'].includes(settings.theme) ? settings.theme : 'system';
+        const dark = (theme === 'system' ? systemTheme() : theme) === 'dark';
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      } catch (_) { document.documentElement.dataset.theme = systemTheme(); }
+    })();
+  </script>
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/views.css">

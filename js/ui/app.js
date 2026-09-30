@@ -6,7 +6,7 @@
   const { Project } = O.project;
 
   const SETTINGS_KEY = 'oat.settings.v1';
-  const DEFAULTS = { liveValidation: true, opIdUnique: 'error', opIdRequired: false, singleTag: false, tagsMustExist: true, recovery: false };
+  const DEFAULTS = { liveValidation: true, opIdUnique: 'error', opIdRequired: false, singleTag: false, tagsMustExist: true, recovery: false, theme: 'system' };
   function loadSettings() { try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) { return Object.assign({}, DEFAULTS); } }
 
   const app = (O.app = {
@@ -19,7 +19,24 @@
   app.toast = toast;
   app.confirm = O.dom.confirmDialog;
   app.prompt = O.dom.promptDialog;
-  app.setSetting = function (k, v) { app.settings[k] = v; try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(app.settings)); } catch (e) { /* opcional */ } if (k === 'recovery' && !v) O.fileio.clearRecovery(); };
+  function applyTheme(theme) {
+    const dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  }
+  applyTheme(app.settings.theme);
+  const systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  systemThemeQuery.addEventListener('change', () => { if (app.settings.theme === 'system') applyTheme('system'); });
+  app.setSetting = function (k, v) {
+    app.settings[k] = v;
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(app.settings)); } catch (e) { /* opcional */ }
+    if (k === 'theme') applyTheme(v);
+    if (k === 'recovery' && !v) O.fileio.clearRecovery();
+  };
+  app.toggleTheme = function () {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    app.setSetting('theme', next);
+    renderToolbar();
+  };
   app.validationConfig = () => ({ opIdUnique: app.settings.opIdUnique, opIdRequired: app.settings.opIdRequired, singleTag: app.settings.singleTag, tagsMustExist: app.settings.tagsMustExist });
 
   /* ---------- Actividad ---------- */
@@ -153,6 +170,8 @@
     const errCount = res ? res.stats.errors : 0; const warnCount = res ? res.stats.warnings : 0;
     const val = iconBtn('shield-check', 'Validar contrato' + (res ? ' (' + errCount + ' errores, ' + warnCount + ' avisos)' : ''), () => { app.validate(true); if (!app.panelOpen) app.togglePanel(); }, 'val-btn' + (errCount ? ' has-err' : ''));
     if (res && (errCount || warnCount)) val.appendChild(h('span', { class: 'count-badge ' + (errCount ? 'err' : 'warn') }, String(errCount || warnCount)));
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const themeToggle = iconBtn(dark ? 'sun' : 'moon', dark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro', () => app.toggleTheme(), 'theme-toggle');
     bar.append(
       iconBtn('panel-left', 'Mostrar u ocultar el explorador', () => document.body.classList.toggle('sidebar-open'), 'only-narrow'),
       h('div', { class: 'brand' }, h('img', { src: 'assets/logo.svg', alt: '', width: 26, height: 26 }), h('span', { class: 'brand-name' }, 'OpenAPI')),
@@ -165,6 +184,7 @@
       h('div', { class: 'tool-group' }, iconBtn('undo-2', 'Deshacer', () => doUndo(), '', { disabled: !P.canUndo() }), iconBtn('redo-2', 'Rehacer', () => doRedo(), '', { disabled: !P.canRedo() })),
       h('div', { class: 'tool-group' }, val,
         iconBtn('git-compare', 'Comparar contratos', () => app.setMode(app.mode === 'compare' ? 'edit' : 'compare'), app.mode === 'compare' ? 'active' : ''),
+        themeToggle,
         iconBtn('settings', 'Ajustes', () => settingsDialog())));
     document.title = (P.name || 'contrato') + (dirty ? ' \u2022' : '') + ' \u2014 Editor OpenAPI';
   }
@@ -303,6 +323,7 @@
       sel('opIdUnique', 'operationId duplicado', [['error', 'Error'], ['warning', 'Aviso'], ['off', 'No comprobar']]), chk('opIdRequired', 'operationId obligatorio en todas las operaciones'), chk('singleTag', 'Exigir exactamente un tag por operación'), chk('tagsMustExist', 'Avisar de tags no declarados'),
       O.forms.section('Recuperación local'), h('label', { class: 'check' }, rec, h('span', null, 'Guardar una copia de recuperación del contrato con cambios en este navegador (almacenamiento local, solo si lo activas)')),
       btn('Borrar copia de recuperación', () => { O.fileio.clearRecovery(); toast('Copia de recuperación borrada', 'ok'); }, 'small', 'trash-2'),
+      O.forms.section('Apariencia'), sel('theme', 'Tema', [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']]),
       O.forms.section('Entorno'), h('p', { class: 'muted' }, 'Idioma: español. Referencias remotas (http/https): siempre deshabilitadas; la herramienta no realiza llamadas de red.'),
       h('p', { class: 'muted' }, O.fileio.hasFsAccess ? 'Escritura en carpetas: disponible (File System Access).' : 'Escritura en carpetas: no disponible en este navegador; se descarga un ZIP.')),
     cancelValue: null, actions: [{ label: 'Cerrar', kind: 'primary', value: null }] });
