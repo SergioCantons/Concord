@@ -10,7 +10,7 @@ const ICONS = [
   'search', 'plus', 'trash-2', 'copy', 'chevron-up', 'chevron-down', 'chevron-right', 'x', 'check', 'alert-triangle',
   'alert-circle', 'info', 'file-code', 'files', 'route', 'braces', 'box', 'server', 'tags', 'lock', 'link', 'external-link',
   'download', 'upload', 'arrow-left-right', 'pencil', 'refresh-cw', 'layers', 'list', 'filter', 'circle-dot', 'history',
-  'package', 'file-text', 'archive', 'scissors', 'move', 'panel-left', 'crosshair', 'loader', 'clock', 'folder', 'file'
+  'package', 'file-text', 'archive', 'scissors', 'move', 'panel-left', 'crosshair', 'loader', 'clock', 'folder', 'file', 'sun', 'moon'
 ];
 
 async function main() {
