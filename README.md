@@ -15,6 +15,7 @@ Guía breve:
 - **Guardar** (`Ctrl+S`): elegir documento único o fragments, estrategia (tags, paths, componentes, schemas o reglas propias), número objetivo, nombres y carpeta; se muestra la previsualización (creados/modificados/sin uso) y una verificación del resultado antes de escribir.
 - **Comparar**: cargar base y comparado (botones o arrastrando ficheros YAML/JSON o su carpeta sobre cada tarjeta; pueden tener distinta distribución de ficheros), filtrar, buscar y exportar a Markdown, HTML o JSON. Las vistas *Formulario* (cambios semánticos), *YAML* (diff textual por fichero) y *Dividida* (ambas, solo en pantallas anchas) conservan los contratos elegidos y el resultado.
 - Atajos: `Ctrl+S` guardar, `Ctrl+K` buscar, `Ctrl+Z` / `Ctrl+Y` deshacer/rehacer (fuera de campos de texto).
+- **Paneles ajustables**: arrastra los separadores para cambiar el ancho del explorador, el alto del panel de validación, el reparto de la vista dividida (formulario/YAML) y, en el comparador, el reparto entre cambios y diff, y entre la lista de cambios y su detalle. También con el teclado (foco en el separador + flechas; `Mayús` para pasos grandes). Doble clic o `Intro` vuelven al tamaño original. Los tamaños se guardan en `localStorage`.
 
 ## Desarrollo
 
@@ -48,7 +49,7 @@ Tamaño del código empaquetado: `vendor/oat-vendor.js` ≈ 327 KB (minificado) 
 
 - No hay llamadas de red: ni al abrir, ni al validar, ni al comparar. Las referencias `$ref` remotas (`http://`, `https://`) están siempre deshabilitadas y se reportan como error accionable. No hay telemetría ni IA.
 - Los contratos no salen del equipo. Datos que el navegador guarda localmente:
-  - Preferencias de validación en `localStorage`.
+  - Preferencias de validación y tamaños de los paneles en `localStorage`.
   - Contratos recientes (carpetas y ficheros sueltos, hasta 8) en IndexedDB: solo los identificadores que da el navegador, no su contenido. Se pueden vaciar desde el propio menú de recientes.
   - Recuperación de sesión: **desactivada por defecto**; si se activa en ajustes, copia el contenido de los ficheros en `localStorage` mientras hay cambios sin guardar.
 - Las rutas de `$ref` se resuelven dentro de la carpeta del proyecto; las que salen de ella o son absolutas se marcan como error. La escritura rechaza rutas con `..`, absolutas, con unidad (`C:`) o dentro de `.oat-backup/`.
