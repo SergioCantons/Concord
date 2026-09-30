@@ -1,0 +1,350 @@
+components:
+  schemas:
+    Categoria:
+      type: object
+      properties:
+        padre:
+          $ref: '#/components/schemas/Categoria'
+        nombre:
+          type: string
+        id:
+          type: integer
+      required:
+        - id
+        - nombre
+    Pedido:
+      required: [lineas, estado, id]
+      type: object
+      properties:
+        total:
+          format: double
+          type: number
+        creadoEn:
+          format: date-time
+          type: string
+        lineas:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineaPedido'
+        estado:
+          type: string
+          enum: [cancelado, pagado, pendiente]
+        id:
+          type: string
+          readOnly: true
+    LineaPedido:
+      properties:
+        precioUnitario:
+          type: number
+          format: double
+        cantidad:
+          minimum: 1
+          type: integer
+        productoId:
+          format: uuid
+          type: string
+      type: object
+      required: [cantidad, productoId]
+    Error:
+      type: object
+      required: [mensaje, codigo]
+      properties:
+        detalles:
+          items:
+            type: string
+          type: array
+        mensaje:
+          type: string
+        codigo:
+          example: PRODUCTO_NO_ENCONTRADO
+          type: string
+    Producto:
+      x-internal-name: ProductRecord
+      type: object
+      required: [precio, nombre, id]
+      properties:
+        etiquetas:
+          items:
+            type: string
+          type: array
+          uniqueItems: true
+        categoria:
+          $ref: '#/components/schemas/Categoria'
+        moneda:
+          default: EUR
+          enum: [GBP, USD, EUR]
+          type: string
+        precio:
+          type: string
+          description: Ahora se envia como texto decimal
+        descripcion:
+          type: string
+        nombre:
+          maxLength: 120
+          minLength: 1
+          type: string
+        id:
+          readOnly: true
+          format: uuid
+          type: string
+    ProductoNuevo:
+      type: object
+      required: [precio, nombre]
+      properties:
+        categoriaId:
+          type: integer
+        moneda:
+          default: EUR
+          enum: [GBP, USD, EUR]
+          type: string
+        precio:
+          minimum: 0
+          format: double
+          type: number
+        descripcion:
+          type: string
+        nombre:
+          maxLength: 120
+          minLength: 1
+          type: string
+    ListaProductos:
+      type: object
+      required: [total, datos]
+      properties:
+        total:
+          minimum: 0
+          type: integer
+        datos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Producto'
+  securitySchemes:
+    apiKey:
+      name: X-Api-Key
+      in: header
+      type: apiKey
+  responses:
+    NoEncontrado:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      description: El recurso solicitado no existe
+  parameters:
+    Desplazamiento:
+      schema:
+        default: 0
+        minimum: 0
+        type: integer
+      required: false
+      description: Elementos a saltar
+      in: query
+      name: desplazamiento
+    Limite:
+      schema:
+        default: 20
+        maximum: 100
+        minimum: 1
+        type: integer
+      required: false
+      description: Numero maximo de elementos a devolver
+      in: query
+      name: limite
+paths:
+  /pedidos/{pedidoId}:
+    get:
+      tags: [pedidos]
+      summary: Obtener un pedido
+      operationId: obtenerPedido
+      responses:
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '200':
+          description: Pedido encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pedido'
+    parameters:
+      - name: pedidoId
+        in: path
+        description: Identificador del pedido
+        required: true
+        schema:
+          type: string
+  /pedidos:
+    post:
+      operationId: crearPedido
+      tags: [pedidos]
+      summary: Crear un pedido
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              required: [lineas]
+              type: object
+              properties:
+                lineas:
+                  minItems: 1
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/LineaPedido'
+      responses:
+        '201':
+          description: Pedido creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pedido'
+    get:
+      operationId: listarPedidos
+      tags: [pedidos]
+      summary: Listar pedidos
+      parameters:
+        - $ref: '#/components/parameters/Limite'
+        - name: estado
+          in: query
+          description: Filtra por estado del pedido
+          schema:
+            type: string
+            enum: [pendiente, pagado, cancelado]
+      responses:
+        '200':
+          description: Lista de pedidos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pedido'
+  /productos/{productoId}:
+    parameters:
+      - name: productoId
+        in: path
+        description: Identificador del producto
+        required: true
+        schema:
+          format: uuid
+          type: string
+    put:
+      operationId: actualizarProducto
+      tags: [productos]
+      summary: Actualizar un producto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoNuevo'
+      responses:
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '200':
+          description: Producto actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Producto'
+    get:
+      operationId: obtenerProducto
+      tags: [productos]
+      summary: Obtener un producto
+      responses:
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '200':
+          description: Producto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Producto'
+  /productos:
+    post:
+      operationId: crearProducto
+      tags: [productos]
+      summary: Crear un producto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoNuevo'
+      responses:
+        '422':
+          description: Datos no validos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '201':
+          description: Producto creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Producto'
+    get:
+      operationId: listarProductos
+      summary: Listar productos
+      description: Devuelve el catalogo paginado.
+      tags: [productos]
+      parameters:
+        - name: categoria
+          in: query
+          description: Filtra por identificador de categoria
+          required: true
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/Desplazamiento'
+        - $ref: '#/components/parameters/Limite'
+      responses:
+        '200':
+          description: Lista de productos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaProductos'
+        default:
+          description: Error inesperado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /categorias:
+    get:
+      operationId: listarCategorias
+      tags: [productos]
+      summary: Listar categorias
+      responses:
+        '200':
+          description: Categorias
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Categoria'
+tags:
+  - name: pedidos
+    description: Gestion de pedidos
+  - name: productos
+    description: Catalogo de productos
+security:
+  - apiKey: []
+servers:
+  - description: Preproduccion
+    url: https://staging.tienda.ejemplo.com/v1
+  - description: Produccion
+    url: https://api.tienda.ejemplo.com/v1
+info:
+  x-owner: equipo-catalogo
+  license:
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+    name: Apache 2.0
+  contact:
+    email: plataforma@ejemplo.com
+    name: Equipo de plataforma
+  version: 1.3.0
+  description: Contrato de ejemplo ficticio para probar el editor y el comparador.
+  title: API de Tienda (ejemplo)
+openapi: 3.0.3

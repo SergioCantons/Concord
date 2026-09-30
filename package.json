@@ -1,0 +1,24 @@
+{
+  "name": "openapi-editor-comparador",
+  "version": "1.0.0",
+  "description": "Editor visual y comparador semantico de contratos OpenAPI (HTML + CSS + JS, sin servidor)",
+  "scripts": {
+    "build": "node scripts/build-vendor.js && node scripts/build-examples.js",
+    "build:examples": "node scripts/build-examples.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@apidevtools/openapi-schemas": "^2.1.0",
+    "ajv-draft-04": "^1.0.0",
+    "ajv-formats": "^3.0.1",
+    "fflate": "^0.8.3",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "esbuild-wasm": "0.28.2",
+    "lucide-static": "^1.49.0"
+  },
+  "private": true
+}

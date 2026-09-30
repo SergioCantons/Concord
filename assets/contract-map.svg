@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 260" role="img" aria-label="Mapa de un contrato: el fichero raíz referencia rutas y schemas">
+  <style>
+    text{font-family:Bahnschrift,"Segoe UI",sans-serif;font-size:12px;fill:#1c2427}
+    .edge{stroke:#b9c3c7;stroke-width:1.5;fill:none}
+    .node{fill:#fff;stroke:#cdd3d6;stroke-width:1.2}
+    .root{fill:#0f766e;stroke:#0f766e}
+    .rt{fill:#fff;font-weight:600}
+    .m{font-size:10px;font-weight:700;fill:#fff}
+  </style>
+  <path class="edge" d="M260 120 C200 120 170 55 130 50"/>
+  <path class="edge" d="M260 130 C200 130 170 130 130 130"/>
+  <path class="edge" d="M260 140 C200 140 170 205 130 210"/>
+  <path class="edge" d="M330 120 C370 120 390 55 420 50"/>
+  <path class="edge" d="M330 130 C370 130 390 130 420 130"/>
+  <path class="edge" d="M330 140 C370 140 390 205 420 210"/>
+  <path class="edge" d="M462 62 C490 92 490 108 462 118" stroke-dasharray="4 3"/>
+  <rect class="node root" x="260" y="105" width="70" height="50" rx="8"/>
+  <text class="rt" x="295" y="126" text-anchor="middle">openapi</text><text class="rt" x="295" y="141" text-anchor="middle">.yaml</text>
+  <rect class="node" x="30" y="32" width="100" height="36" rx="6"/><rect x="36" y="42" width="30" height="16" rx="3" fill="#2f7d4f"/><text class="m" x="51" y="53" text-anchor="middle">GET</text><text x="72" y="54">/productos</text>
+  <rect class="node" x="30" y="112" width="100" height="36" rx="6"/><rect x="36" y="122" width="30" height="16" rx="3" fill="#b7791f"/><text class="m" x="51" y="133" text-anchor="middle">POST</text><text x="72" y="134">/pedidos</text>
+  <rect class="node" x="30" y="192" width="100" height="36" rx="6"/><rect x="36" y="202" width="30" height="16" rx="3" fill="#b42318"/><text class="m" x="51" y="213" text-anchor="middle">DEL</text><text x="72" y="214">/productos/{id}</text>
+  <rect class="node" x="420" y="32" width="90" height="36" rx="6"/><text x="465" y="54" text-anchor="middle">Producto</text>
+  <rect class="node" x="420" y="112" width="90" height="36" rx="6"/><text x="465" y="134" text-anchor="middle">Pedido</text>
+  <rect class="node" x="420" y="192" width="90" height="36" rx="6"/><text x="465" y="214" text-anchor="middle">Error</text>
+</svg>

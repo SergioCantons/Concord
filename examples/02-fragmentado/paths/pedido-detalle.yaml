@@ -1,0 +1,20 @@
+parameters:
+  - name: pedidoId
+    in: path
+    description: Identificador del pedido
+    required: true
+    schema:
+      type: string
+get:
+  operationId: obtenerPedido
+  summary: Obtener un pedido
+  tags: [pedidos]
+  responses:
+    '200':
+      description: Pedido encontrado
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/pedido.yaml
+    '404':
+      $ref: ../openapi.yaml#/components/responses/NoEncontrado

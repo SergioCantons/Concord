@@ -1,0 +1,19 @@
+type: object
+required: [id, estado, lineas]
+properties:
+  id:
+    type: string
+    readOnly: true
+  estado:
+    type: string
+    enum: [pendiente, pagado, enviado, cancelado]
+  lineas:
+    type: array
+    items:
+      $ref: ./linea-pedido.yaml
+  total:
+    type: number
+    format: double
+  creadoEn:
+    type: string
+    format: date-time

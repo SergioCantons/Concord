@@ -1,0 +1,10 @@
+# Referencia circular: una categoria puede tener una categoria padre.
+type: object
+required: [id, nombre]
+properties:
+  id:
+    type: integer
+  nombre:
+    type: string
+  padre:
+    $ref: ./categoria.yaml

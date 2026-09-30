@@ -1,0 +1,34 @@
+openapi: 3.0.3
+info:
+  title: API de notas (ejemplo simple)
+  version: 1.0.0
+paths:
+  /notas/{id}:
+    get:
+      operationId: obtenerNota
+      summary: Obtener una nota
+      tags: [notas]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Nota encontrada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, texto]
+                properties:
+                  id:
+                    type: integer
+                  texto:
+                    type: string
+        '404':
+          description: No existe
+tags:
+  - name: notas
+    description: Notas del usuario

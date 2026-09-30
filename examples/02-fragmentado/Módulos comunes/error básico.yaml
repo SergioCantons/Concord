@@ -1,0 +1,12 @@
+type: object
+required: [codigo, mensaje]
+properties:
+  codigo:
+    type: string
+    example: PRODUCTO_NO_ENCONTRADO
+  mensaje:
+    type: string
+  detalles:
+    type: array
+    items:
+      type: string

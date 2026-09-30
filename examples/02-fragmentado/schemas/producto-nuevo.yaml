@@ -1,0 +1,19 @@
+type: object
+required: [nombre, precio]
+properties:
+  nombre:
+    type: string
+    minLength: 1
+    maxLength: 120
+  descripcion:
+    type: string
+  precio:
+    type: number
+    format: double
+    minimum: 0
+  moneda:
+    type: string
+    enum: [EUR, USD, GBP]
+    default: EUR
+  categoriaId:
+    type: integer

@@ -1,0 +1,82 @@
+openapi: 3.0.3
+# Ejemplo ficticio: API de una tienda dividida en fragments.
+info:
+  title: API de Tienda (ejemplo)
+  description: Contrato de ejemplo ficticio para probar el editor y el comparador.
+  version: 1.2.0
+  contact:
+    name: Equipo de plataforma
+    email: plataforma@ejemplo.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  x-owner: equipo-catalogo # extension propietaria: se conserva al guardar
+servers:
+  - url: https://api.tienda.ejemplo.com/v1
+    description: Produccion
+  - url: https://staging.tienda.ejemplo.com/v1
+    description: Preproduccion
+tags:
+  - name: productos
+    description: Catalogo de productos
+  - name: pedidos
+    description: Gestion de pedidos
+security:
+  - apiKey: []
+paths:
+  /productos:
+    $ref: ./paths/productos.yaml
+  /productos/{productoId}:
+    $ref: ./paths/producto-detalle.yaml
+  /pedidos:
+    $ref: ./paths/pedidos.yaml
+  /pedidos/{pedidoId}:
+    $ref: ./paths/pedido-detalle.yaml
+components:
+  schemas:
+    Producto:
+      $ref: ./schemas/producto.yaml
+    ProductoNuevo:
+      $ref: ./schemas/producto-nuevo.yaml
+    ListaProductos:
+      $ref: ./schemas/lista-productos.yaml
+    Categoria:
+      $ref: ./schemas/categoria.yaml
+    Pedido:
+      $ref: ./schemas/pedido.yaml
+    LineaPedido:
+      $ref: ./schemas/linea-pedido.yaml
+    Error:
+      $ref: ./Módulos comunes/error básico.yaml
+  parameters:
+    Limite:
+      name: limite
+      in: query
+      description: Numero maximo de elementos a devolver
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Desplazamiento:
+      name: desplazamiento
+      in: query
+      description: Elementos a saltar
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+  responses:
+    NoEncontrado:
+      description: El recurso solicitado no existe
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key

@@ -1,0 +1,45 @@
+get:
+  operationId: listarPedidos
+  summary: Listar pedidos
+  tags: [pedidos]
+  parameters:
+    - $ref: ../openapi.yaml#/components/parameters/Limite
+    - name: estado
+      in: query
+      description: Filtra por estado del pedido
+      schema:
+        type: string
+        enum: [pendiente, pagado, enviado, cancelado]
+  responses:
+    '200':
+      description: Lista de pedidos
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: ../schemas/pedido.yaml
+post:
+  operationId: crearPedido
+  summary: Crear un pedido
+  tags: [pedidos]
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          type: object
+          required: [lineas]
+          properties:
+            lineas:
+              type: array
+              minItems: 1
+              items:
+                $ref: ../schemas/linea-pedido.yaml
+  responses:
+    '201':
+      description: Pedido creado
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/pedido.yaml

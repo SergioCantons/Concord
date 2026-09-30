@@ -1,0 +1,30 @@
+# Schema compartido por varias operaciones: editarlo aqui actualiza todas.
+type: object
+required: [id, nombre, precio]
+properties:
+  id:
+    type: string
+    format: uuid
+    readOnly: true
+  nombre:
+    type: string
+    minLength: 1
+    maxLength: 120
+  descripcion:
+    type: string
+  precio:
+    type: number
+    format: double
+    minimum: 0
+  moneda:
+    type: string
+    enum: [EUR, USD, GBP]
+    default: EUR
+  categoria:
+    $ref: ./categoria.yaml
+  etiquetas:
+    type: array
+    uniqueItems: true
+    items:
+      type: string
+x-internal-name: ProductRecord

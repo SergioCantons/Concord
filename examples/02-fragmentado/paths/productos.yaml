@@ -1,0 +1,50 @@
+get:
+  operationId: listarProductos
+  summary: Listar productos
+  description: Devuelve el catalogo paginado.
+  tags: [productos]
+  parameters:
+    - $ref: ../openapi.yaml#/components/parameters/Limite
+    - $ref: ../openapi.yaml#/components/parameters/Desplazamiento
+    - name: categoria
+      in: query
+      description: Filtra por identificador de categoria
+      required: false
+      schema:
+        type: integer
+  responses:
+    '200':
+      description: Lista de productos
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/lista-productos.yaml
+    default:
+      description: Error inesperado
+      content:
+        application/json:
+          schema:
+            $ref: '../Módulos comunes/error básico.yaml'
+post:
+  operationId: crearProducto
+  summary: Crear un producto
+  tags: [productos]
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: ../schemas/producto-nuevo.yaml
+  responses:
+    '201':
+      description: Producto creado
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/producto.yaml
+    '422':
+      description: Datos no validos
+      content:
+        application/json:
+          schema:
+            $ref: '../Módulos comunes/error básico.yaml'

@@ -1,0 +1,49 @@
+parameters:
+  - name: productoId
+    in: path
+    description: Identificador del producto
+    required: true
+    schema:
+      type: string
+      format: uuid
+get:
+  operationId: obtenerProducto
+  summary: Obtener un producto
+  tags: [productos]
+  responses:
+    '200':
+      description: Producto encontrado
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/producto.yaml
+    '404':
+      $ref: ../openapi.yaml#/components/responses/NoEncontrado
+put:
+  operationId: actualizarProducto
+  summary: Actualizar un producto
+  tags: [productos]
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: ../schemas/producto-nuevo.yaml
+  responses:
+    '200':
+      description: Producto actualizado
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/producto.yaml
+    '404':
+      $ref: ../openapi.yaml#/components/responses/NoEncontrado
+delete:
+  operationId: eliminarProducto
+  summary: Eliminar un producto
+  tags: [productos]
+  responses:
+    '204':
+      description: Producto eliminado
+    '404':
+      $ref: ../openapi.yaml#/components/responses/NoEncontrado

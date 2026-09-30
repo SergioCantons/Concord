@@ -1,0 +1,46 @@
+openapi: 3.0.3
+info:
+  title: Contrato con errores (ejemplo)
+  version: 0.1.0
+  campoDesconocido: no permitido en info
+tags:
+  - name: usuarios
+paths:
+  /usuarios/{usuarioId}:
+    get:
+      operationId: obtenerUsuario
+      tags: [usuarios, inexistente]
+      responses:
+        '200':
+          description: Usuario
+          content:
+            application/json:
+              schema:
+                $ref: ./schemas/no-existe.yaml
+  /usuarios:
+    get:
+      operationId: obtenerUsuario
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Usuarios'
+    post:
+      operationId: crearUsuario
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: ./schemas/mal-formado.yaml
+      responses:
+        '99':
+          description: Codigo no valido
+components:
+  schemas:
+    Usuario:
+      type: object
+      properties:
+        nombre:
+          type: string

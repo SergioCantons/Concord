@@ -1,0 +1,12 @@
+type: object
+required: [productoId, cantidad]
+properties:
+  productoId:
+    type: string
+    format: uuid
+  cantidad:
+    type: integer
+    minimum: 1
+  precioUnitario:
+    type: number
+    format: double

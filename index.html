@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Editor OpenAPI</title>
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/views.css">
+</head>
+<body>
+  <header id="toolbar" class="toolbar" role="banner"></header>
+  <div class="busy-bar" aria-hidden="true"></div>
+  <div id="workspace" class="workspace">
+    <div id="sidebar-slot" class="sidebar-slot"></div>
+    <div id="scrim" class="scrim"></div>
+    <main id="main" class="main">
+      <div id="main-head" class="main-head"></div>
+      <div id="main-body" class="main-body"></div>
+      <div id="compare-slot" class="compare-slot"></div>
+    </main>
+  </div>
+  <div id="validation-slot" class="validation-slot"></div>
+
+  <script src="vendor/oat-vendor.js"></script>
+  <script src="vendor/icons.js"></script>
+  <script src="js/core/util.js"></script>
+  <script src="js/core/vendor.js"></script>
+  <script src="js/core/project.js"></script>
+  <script src="js/core/bundle.js"></script>
+  <script src="js/core/validate.js"></script>
+  <script src="js/core/ops.js"></script>
+  <script src="js/core/compare.js"></script>
+  <script src="js/core/export.js"></script>
+  <script src="js/core/writer.js"></script>
+  <script src="js/ui/examples-data.js"></script>
+  <script src="js/ui/dom.js"></script>
+  <script src="js/ui/fileio.js"></script>
+  <script src="js/ui/forms.js"></script>
+  <script src="js/ui/schema.js"></script>
+  <script src="js/ui/content.js"></script>
+  <script src="js/ui/pages.js"></script>
+  <script src="js/ui/explorer.js"></script>
+  <script src="js/ui/yaml-editor.js"></script>
+  <script src="js/ui/validation.js"></script>
+  <script src="js/ui/save.js"></script>
+  <script src="js/ui/compare-view.js"></script>
+  <script src="js/ui/app.js"></script>
+  <script>OAT.app.start();</script>
+</body>
+</html>
