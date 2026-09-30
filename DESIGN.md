@@ -50,6 +50,12 @@ The dark palette uses tinted charcoal rather than pure black. Semantic status co
 - **Accessibility**: labelled icon button and native select; the button label describes the destination theme and color contrast follows the palette above.
 - **Motion**: no layout animation; color transitions are omitted to avoid a flash during startup.
 
+### Example contracts preference
+- **Structure**: checkbox inside the existing settings dialog.
+- **Variants**: shown or hidden in the New, Open, and Compare entry points.
+- **States**: enabled by default, disabled, persisted.
+- **Accessibility**: native checkbox with an explicit label; hiding examples does not remove the active initial contract.
+
 ### Workbench surfaces
 - **Structure**: toolbar, sidebar, main editor, dialogs, menus, validation panel.
 - **Variants**: light and dark token sets selected by `data-theme`.
