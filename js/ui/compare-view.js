@@ -46,6 +46,7 @@
         btn('Carpeta...', () => load(which, O.fileio.openFolder), 'small', 'folder-open'),
         btn('Archivos...', () => load(which, O.fileio.openLooseFiles), 'small', 'file-up'),
         btn('Contrato abierto', () => useCurrent(which), 'small', 'file-code'));
+      if (O.fileio.hasFsAccess) actions.appendChild(btn('Recientes', async (e) => { const anchor = e.currentTarget; showMenu(anchor, await app.recentMenuItems((rec) => load(which, () => O.fileio.openRecent(rec)), { empty: true })); }, 'small', 'history'));
       if (app.settings.showExamples) actions.appendChild(btn('Ejemplo', (e) => showMenu(e.currentTarget, Object.keys(O.EXAMPLES).map((k) => ({ label: O.EXAMPLES[k].title, onClick: () => useExample(which, k) }))), 'small', 'archive'));
       card.appendChild(actions);
       card.append(h('p', { class: 'cmp-drop-hint muted' }, icon('upload'), h('span', null, 'O arrastra aquí ficheros YAML/JSON o su carpeta')),
@@ -82,6 +83,8 @@
         if (!root) return;
         const p = O.project.Project.fromFiles(r.files, root, r.folderName || O.util.basename(root));
         S[which] = describe(p, (r.folderName ? r.folderName + '/' : '') + root);
+        const recent = app.recentEntry(r);
+        if (recent) O.fileio.addRecent(Object.assign({ rootFile: root, name: r.folderName || O.util.basename(root).replace(/\.(ya?ml|json)$/i, '') }, recent));
         S.result = null; render();
       } catch (e) { app.toast('No se pudo abrir: ' + e.message, 'error'); }
     }

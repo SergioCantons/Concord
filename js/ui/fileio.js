@@ -9,6 +9,7 @@
   const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 
   const hasFsAccess = typeof window.showDirectoryPicker === 'function';
+  const hasFilePicker = typeof window.showOpenFilePicker === 'function';
 
   /** Comprueba que una ruta relativa no escapa de la carpeta elegida y es valida en Windows. */
   function safePath(p) {
@@ -113,7 +114,26 @@
     }
     return pickViaInput(true);
   }
-  function openLooseFiles() { return pickViaInput(false); }
+  /** Lee ficheros a partir de sus identificadores (File System Access); se conservan para poder reabrirlos desde recientes. */
+  async function readFileHandles(handles) {
+    const files = new Map();
+    const skipped = [];
+    for (const fh of handles) {
+      if (!YAML_RE.test(fh.name)) continue;
+      const f = await fh.getFile();
+      if (f.size > MAX_BYTES) { skipped.push(fh.name + ' (más de 8 MB)'); continue; }
+      files.set(fh.name, await f.text());
+    }
+    return { files, skipped, fileHandles: handles, folderName: '' };
+  }
+  async function openLooseFiles() {
+    if (!hasFilePicker) return pickViaInput(false);
+    let handles;
+    try {
+      handles = await window.showOpenFilePicker({ multiple: true, id: 'oat-files', types: [{ description: 'Contratos OpenAPI (YAML/JSON)', accept: { 'text/yaml': ['.yaml', '.yml'], 'application/json': ['.json'] } }] });
+    } catch (e) { if (e && e.name === 'AbortError') return null; throw e; }
+    return readFileHandles(handles);
+  }
 
   /** Detecta que ficheros parecen ser raices OpenAPI (contienen una clave openapi/swagger de primer nivel). */
   function detectRoots(files) {
@@ -160,7 +180,8 @@
     download(name, new Blob([data], { type: 'application/zip' }));
   }
 
-  /* ---------- Recientes (IndexedDB, guardan el identificador de carpeta, no el contenido) ---------- */
+  /* ---------- Recientes (IndexedDB, guardan identificadores de carpeta o de ficheros, no el contenido) ---------- */
+  const MAX_RECENTS = 8;
   function idb() {
     return new Promise((resolve, reject) => {
       if (!window.indexedDB) { reject(new Error('IndexedDB no disponible')); return; }
@@ -170,16 +191,32 @@
       r.onerror = () => reject(r.error);
     });
   }
-  async function addRecent(handle, rootFile, name) {
-    if (!handle) return;
+  /** Los registros antiguos no tienen `kind`: siempre eran carpetas. */
+  const recentKind = (rec) => rec.kind || 'folder';
+  const recentHandles = (rec) => (recentKind(rec) === 'files' ? rec.handles || [] : [rec.handle]);
+  async function sameEntry(a, b) { try { return !!a && !!b && await a.isSameEntry(b); } catch (e) { return false; } }
+  async function sameRecent(rec, entry) {
+    if (recentKind(rec) !== recentKind(entry) || rec.rootFile !== entry.rootFile) return false;
+    const a = recentHandles(rec); const b = recentHandles(entry);
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!(await sameEntry(a[i], b[i]))) return false;
+    return true;
+  }
+  /**
+   * Registra un contrato reciente: `{ kind: 'folder', handle }` o `{ kind: 'files', handles }`, más `rootFile` y `name`.
+   * Si ya existía se actualiza su fecha; se conservan los MAX_RECENTS más recientes.
+   */
+  async function addRecent(entry) {
+    const handles = entry && recentHandles(entry);
+    if (!handles || !handles.length || handles.some((x) => !x)) return;
     try {
       const db = await idb();
-      const all = await listRecents();
-      const same = all.find((x) => x.handle && x.rootFile === rootFile && x.name === name);
-      const rec = { id: same ? same.id : 'r' + Date.now(), name, rootFile, handle, ts: Date.now() };
+      let same = null;
+      for (const r of await listRecents()) if (await sameRecent(r, entry)) { same = r; break; }
+      const rec = { id: same ? same.id : 'r' + Date.now(), kind: recentKind(entry), name: entry.name, rootFile: entry.rootFile, ts: Date.now() };
+      if (rec.kind === 'files') rec.handles = entry.handles; else rec.handle = entry.handle;
       await new Promise((res, rej) => { const tx = db.transaction('recents', 'readwrite'); tx.objectStore('recents').put(rec); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-      const rest = (await listRecents()).sort((a, b) => b.ts - a.ts).slice(8);
-      for (const r of rest) await removeRecent(r.id);
+      for (const r of (await listRecents()).slice(MAX_RECENTS)) await removeRecent(r.id);
     } catch (e) { /* los recientes son opcionales */ }
   }
   async function listRecents() {
@@ -188,19 +225,36 @@
       return await new Promise((res, rej) => { const q = db.transaction('recents').objectStore('recents').getAll(); q.onsuccess = () => res((q.result || []).sort((a, b) => b.ts - a.ts)); q.onerror = () => rej(q.error); });
     } catch (e) { return []; }
   }
-  async function removeRecent(id) {
-    try { const db = await idb(); await new Promise((res, rej) => { const tx = db.transaction('recents', 'readwrite'); tx.objectStore('recents').delete(id); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); } catch (e) { /* ignore */ }
+  function storeOp(fn) {
+    return idb().then((db) => new Promise((res, rej) => { const tx = db.transaction('recents', 'readwrite'); fn(tx.objectStore('recents')); tx.oncomplete = res; tx.onerror = () => rej(tx.error); })).catch(() => { /* los recientes son opcionales */ });
   }
-  /** Estado del permiso de una carpeta reciente: 'granted' | 'prompt' | 'denied'. */
+  function removeRecent(id) { return storeOp((s) => s.delete(id)); }
+  function clearRecents() { return storeOp((s) => s.clear()); }
+  /** Las carpetas se abren con escritura (para guardar en ellas); los ficheros sueltos solo se leen. */
+  const permMode = (rec) => (recentKind(rec) === 'files' ? 'read' : 'readwrite');
+  /** Estado del permiso de un reciente: 'granted' | 'prompt' | 'denied'. */
   async function recentPermission(rec) {
-    try { return await rec.handle.queryPermission({ mode: 'readwrite' }); } catch (e) { return 'denied'; }
+    try {
+      const states = [];
+      for (const hd of recentHandles(rec)) states.push(await hd.queryPermission({ mode: permMode(rec) }));
+      return states.includes('denied') ? 'denied' : states.every((s) => s === 'granted') ? 'granted' : 'prompt';
+    } catch (e) { return 'denied'; }
   }
   async function openRecent(rec, onProgress) {
-    let perm = await recentPermission(rec);
-    if (perm !== 'granted') perm = await rec.handle.requestPermission({ mode: 'readwrite' });
-    if (perm !== 'granted') throw new Error('Permiso denegado para la carpeta "' + rec.name + '".');
-    const r = await readDirHandle(rec.handle, onProgress);
-    return Object.assign(r, { handle: rec.handle, folderName: rec.handle.name });
+    const mode = permMode(rec);
+    for (const hd of recentHandles(rec)) {
+      let perm = await hd.queryPermission({ mode });
+      if (perm !== 'granted') perm = await hd.requestPermission({ mode });
+      if (perm !== 'granted') throw new Error('Permiso denegado para "' + hd.name + '".');
+    }
+    try {
+      if (recentKind(rec) === 'files') return await readFileHandles(rec.handles);
+      const r = await readDirHandle(rec.handle, onProgress);
+      return Object.assign(r, { handle: rec.handle, folderName: rec.handle.name });
+    } catch (e) {
+      if (e && e.name === 'NotFoundError') { await removeRecent(rec.id); throw new Error('"' + rec.name + '" ya no existe o se ha movido; se ha quitado de recientes.'); }
+      throw e;
+    }
   }
 
   /* ---------- Recuperacion local opcional (solo si el usuario la activa) ---------- */
@@ -215,5 +269,5 @@
   function loadRecovery() { try { const v = localStorage.getItem(REC_KEY); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function clearRecovery() { try { localStorage.removeItem(REC_KEY); } catch (e) { /* ignore */ } }
 
-  O.fileio = { hasFsAccess, safePath, openFolder, openLooseFiles, readFileList, readDropped, detectRoots, dirIo, download, downloadText, downloadZip, addRecent, listRecents, removeRecent, recentPermission, openRecent, saveRecovery, loadRecovery, clearRecovery };
+  O.fileio = { hasFsAccess, hasFilePicker, safePath, openFolder, openLooseFiles, readFileList, readDropped, detectRoots, dirIo, download, downloadText, downloadZip, addRecent, listRecents, removeRecent, recentPermission, openRecent, clearRecents, recentKind, saveRecovery, loadRecovery, clearRecovery };
 })();
