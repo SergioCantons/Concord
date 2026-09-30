@@ -179,5 +179,5 @@
   function loadRecovery() { try { const v = localStorage.getItem(REC_KEY); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function clearRecovery() { try { localStorage.removeItem(REC_KEY); } catch (e) { /* ignore */ } }
 
-  O.fileio = { hasFsAccess, safePath, openFolder, openLooseFiles, detectRoots, dirIo, download, downloadText, downloadZip, addRecent, listRecents, removeRecent, recentPermission, openRecent, saveRecovery, loadRecovery, clearRecovery };
+  O.fileio = { hasFsAccess, safePath, openFolder, openLooseFiles, readFileList, detectRoots, dirIo, download, downloadText, downloadZip, addRecent, listRecents, removeRecent, recentPermission, openRecent, saveRecovery, loadRecovery, clearRecovery };
 })();
