@@ -6,7 +6,7 @@
   const { Project } = O.project;
 
   const SETTINGS_KEY = 'oat.settings.v1';
-  const DEFAULTS = { liveValidation: true, opIdUnique: 'error', opIdRequired: false, singleTag: false, tagsMustExist: true, recovery: false, theme: 'system' };
+  const DEFAULTS = { liveValidation: true, opIdUnique: 'error', opIdRequired: false, singleTag: false, tagsMustExist: true, recovery: false, theme: 'system', showExamples: true };
   function loadSettings() { try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) { return Object.assign({}, DEFAULTS); } }
 
   const app = (O.app = {
@@ -38,6 +38,7 @@
     renderToolbar();
   };
   app.validationConfig = () => ({ opIdUnique: app.settings.opIdUnique, opIdRequired: app.settings.opIdRequired, singleTag: app.settings.singleTag, tagsMustExist: app.settings.tagsMustExist });
+  app.exampleMenuItems = () => app.settings.showExamples ? Object.keys(O.EXAMPLES).map((k) => ({ label: O.EXAMPLES[k].title, icon: 'archive', onClick: () => guarded(() => openExample(k)) })) : [];
 
   /* ---------- Actividad ---------- */
   app.busy = function (on) { app.busyCount = Math.max(0, app.busyCount + (on ? 1 : -1)); document.body.classList.toggle('busy', app.busyCount > 0); };
@@ -178,7 +179,7 @@
       h('div', { class: 'proj' }, name, P.isExample ? h('span', { class: 'badge example', title: 'Contrato de ejemplo ficticio' }, 'Ejemplo') : null, status),
       h('span', { class: 'spacer' }),
       h('div', { class: 'tool-group' },
-        iconBtn('file-plus', 'Nuevo contrato', (e) => showMenu(e.currentTarget, [{ label: 'Contrato vacío', icon: 'file-plus', onClick: () => guarded(() => app.loadProject(Project.newEmpty(), {})) }, { separator: true }, { header: 'Ejemplos' }].concat(Object.keys(O.EXAMPLES).map((k) => ({ label: O.EXAMPLES[k].title, icon: 'archive', onClick: () => guarded(() => openExample(k)) }))))),
+        iconBtn('file-plus', 'Nuevo contrato', (e) => showMenu(e.currentTarget, [{ label: 'Contrato vacío', icon: 'file-plus', onClick: () => guarded(() => app.loadProject(Project.newEmpty(), {})) }].concat(app.settings.showExamples ? [{ separator: true }, { header: 'Ejemplos' }].concat(app.exampleMenuItems()) : []))),
         iconBtn('folder-open', 'Abrir contrato', (e) => openMenu(e.currentTarget)),
         iconBtn('save', 'Guardar contrato', () => O.saveUI.open(app), 'primary-soft')),
       h('div', { class: 'tool-group' }, iconBtn('undo-2', 'Deshacer', () => doUndo(), '', { disabled: !P.canUndo() }), iconBtn('redo-2', 'Rehacer', () => doRedo(), '', { disabled: !P.canRedo() })),
@@ -295,8 +296,7 @@
         items.push({ label: rec.name, icon: 'history', hint: perm === 'granted' ? '' : 'pide permiso', onClick: () => guarded(async () => { app.busy(true); try { const r = await O.fileio.openRecent(rec); await openFromResult(Object.assign(r, { folderName: rec.handle.name })); } catch (e) { toast(e.message, 'error'); } finally { app.busy(false); } }) });
       }
     }
-    items.push({ separator: true }, { header: 'Ejemplos' });
-    Object.keys(O.EXAMPLES).forEach((k) => items.push({ label: O.EXAMPLES[k].title, icon: 'archive', onClick: () => guarded(() => openExample(k)) }));
+    if (app.settings.showExamples) items.push({ separator: true }, { header: 'Ejemplos' }, ...app.exampleMenuItems());
     showMenu(anchor, items);
   }
   /** Ejecuta la acción tras confirmar qué hacer con los cambios sin guardar. */
@@ -314,7 +314,7 @@
   /* ---------- Ajustes ---------- */
   function settingsDialog() {
     const S = app.settings;
-    const chk = (key, label) => { const i = h('input', { type: 'checkbox', checked: !!S[key] }); i.addEventListener('change', () => { app.setSetting(key, i.checked); if (key === 'liveValidation') app.validationPanel.update(app.validation.result, false); else app.validate(true); }); return h('label', { class: 'check' }, i, h('span', null, label)); };
+    const chk = (key, label) => { const i = h('input', { type: 'checkbox', checked: !!S[key] }); i.addEventListener('change', () => { app.setSetting(key, i.checked); if (key === 'liveValidation') app.validationPanel.update(app.validation.result, false); else if (key === 'showExamples') { renderAll(); if (app.mode === 'compare') app.compareView.refresh(); } else app.validate(true); }); return h('label', { class: 'check' }, i, h('span', null, label)); };
     const sel = (key, label, opts) => { const s = h('select', { 'aria-label': label }, opts.map(([v, l]) => h('option', { value: v }, l))); s.value = S[key]; s.addEventListener('change', () => { app.setSetting(key, s.value); app.validate(true); }); return O.forms.field(label, s); };
     const rec = h('input', { type: 'checkbox', checked: !!S.recovery });
     rec.addEventListener('change', () => { app.setSetting('recovery', rec.checked); if (rec.checked && app.project.isDirty()) O.fileio.saveRecovery(app.project); });
@@ -323,7 +323,7 @@
       sel('opIdUnique', 'operationId duplicado', [['error', 'Error'], ['warning', 'Aviso'], ['off', 'No comprobar']]), chk('opIdRequired', 'operationId obligatorio en todas las operaciones'), chk('singleTag', 'Exigir exactamente un tag por operación'), chk('tagsMustExist', 'Avisar de tags no declarados'),
       O.forms.section('Recuperación local'), h('label', { class: 'check' }, rec, h('span', null, 'Guardar una copia de recuperación del contrato con cambios en este navegador (almacenamiento local, solo si lo activas)')),
       btn('Borrar copia de recuperación', () => { O.fileio.clearRecovery(); toast('Copia de recuperación borrada', 'ok'); }, 'small', 'trash-2'),
-      O.forms.section('Apariencia'), sel('theme', 'Tema', [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']]),
+      O.forms.section('Apariencia'), sel('theme', 'Tema', [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']]), chk('showExamples', 'Mostrar contratos de ejemplo en los menús'),
       O.forms.section('Entorno'), h('p', { class: 'muted' }, 'Idioma: español. Referencias remotas (http/https): siempre deshabilitadas; la herramienta no realiza llamadas de red.'),
       h('p', { class: 'muted' }, O.fileio.hasFsAccess ? 'Escritura en carpetas: disponible (File System Access).' : 'Escritura en carpetas: no disponible en este navegador; se descarga un ZIP.')),
     cancelValue: null, actions: [{ label: 'Cerrar', kind: 'primary', value: null }] });

@@ -21,8 +21,8 @@
       const actions = h('div', { class: 'row wrap' },
         btn('Carpeta...', () => load(which, 'folder'), 'small', 'folder-open'),
         btn('Archivos...', () => load(which, 'files'), 'small', 'file-up'),
-        btn('Contrato abierto', () => useCurrent(which), 'small', 'file-code'),
-        btn('Ejemplo', (e) => showMenu(e.currentTarget, Object.keys(O.EXAMPLES).map((k) => ({ label: O.EXAMPLES[k].title, onClick: () => useExample(which, k) }))), 'small', 'archive'));
+        btn('Contrato abierto', () => useCurrent(which), 'small', 'file-code'));
+      if (app.settings.showExamples) actions.appendChild(btn('Ejemplo', (e) => showMenu(e.currentTarget, Object.keys(O.EXAMPLES).map((k) => ({ label: O.EXAMPLES[k].title, onClick: () => useExample(which, k) }))), 'small', 'archive'));
       card.appendChild(actions);
       return card;
     }
