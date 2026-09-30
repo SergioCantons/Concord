@@ -13,7 +13,7 @@ Guía breve:
 - **Editar schemas**: sección de componentes; propiedades, `required`, restricciones, `enum`, composición (`allOf`/`oneOf`/`anyOf`), extraer un schema inline a componente, renombrar (reescribe los `$ref`) y eliminar (avisa de los consumidores).
 - **YAML avanzado**: pestaña de YAML por fichero; un YAML inválido se guarda como borrador y no se pierde.
 - **Guardar** (`Ctrl+S`): elegir documento único o fragments, estrategia (tags, paths, componentes, schemas o reglas propias), número objetivo, nombres y carpeta; se muestra la previsualización (creados/modificados/sin uso) y una verificación del resultado antes de escribir.
-- **Comparar**: cargar base y comparado (pueden tener distinta distribución de ficheros), filtrar, buscar y exportar a Markdown, HTML o JSON; diff textual por fichero como vista secundaria.
+- **Comparar**: cargar base y comparado (botones o arrastrando ficheros YAML/JSON o su carpeta sobre cada tarjeta; pueden tener distinta distribución de ficheros), filtrar, buscar y exportar a Markdown, HTML o JSON. Las vistas *Formulario* (cambios semánticos), *YAML* (diff textual por fichero) y *Dividida* (ambas, solo en pantallas anchas) conservan los contratos elegidos y el resultado.
 - Atajos: `Ctrl+S` guardar, `Ctrl+K` buscar, `Ctrl+Z` / `Ctrl+Y` deshacer/rehacer (fuera de campos de texto).
 
 ## Desarrollo

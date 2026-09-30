@@ -6,13 +6,33 @@
   const F = O.forms;
   const KIND = { added: ['+', 'Añadido'], removed: ['\u2212', 'Eliminado'], modified: ['~', 'Modificado'], renamed: ['\u21C4', 'Renombrado'], moved: ['\u2192', 'Movido'], error: ['!', 'Error'], unchanged: ['=', 'Sin cambios'] };
   const hasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+  // Mismas vistas que el editor: Formulario = cambios semánticos, YAML = diff textual, Dividida = ambas a la vez.
+  const VIEWS = [['form', 'Formulario', 'panel-left', 'Cambios semánticos'], ['yaml', 'YAML', 'file-code', 'Diff textual por fichero'], ['split', 'Dividida', 'layers', 'Cambios semánticos y diff textual']];
+  const isNarrow = () => window.innerWidth < 900;
 
   function create(app) {
     const el = h('div', { class: 'compare-view' });
-    const S = app.cmp = app.cmp || { base: null, next: null, result: null, running: false, filters: { kinds: new Set(['added', 'removed', 'modified', 'renamed', 'moved', 'error']), breaking: 'all', q: '', tag: '', method: '', area: '' }, selId: null, view: 'changes', xMode: 'informative', textPair: {} };
+    const head = h('div', { class: 'seg view-seg', role: 'tablist', 'aria-label': 'Vista de la comparación' });
+    const S = app.cmp = app.cmp || { base: null, next: null, result: null, running: false, filters: { kinds: new Set(['added', 'removed', 'modified', 'renamed', 'moved', 'error']), breaking: 'all', q: '', tag: '', method: '', area: '' }, selId: null, view: 'form', xMode: 'informative', textPair: {} };
+    let content = null;
     // Un fichero soltado fuera de las tarjetas no debe hacer que el navegador lo abra y abandone la aplicación.
-    el.addEventListener('dragover', (e) => { if (!e.defaultPrevented && hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; } });
-    el.addEventListener('drop', (e) => { if (hasFiles(e)) e.preventDefault(); });
+    document.addEventListener('dragover', (e) => { if (app.mode === 'compare' && !e.defaultPrevented && hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; } });
+    document.addEventListener('drop', (e) => { if (app.mode === 'compare' && hasFiles(e)) e.preventDefault(); });
+
+    function currentView() {
+      if (!VIEWS.some((v) => v[0] === S.view) || (S.view === 'split' && isNarrow())) S.view = 'form';
+      return S.view;
+    }
+    function renderTabs() {
+      const cur = currentView();
+      head.textContent = '';
+      VIEWS.filter(([id]) => id !== 'split' || !isNarrow()).forEach(([id, label, ic, title]) => head.appendChild(h('button', { type: 'button', role: 'tab', title, class: cur === id ? 'on' : '', 'aria-selected': cur === id ? 'true' : 'false', onclick: () => setView(id) }, icon(ic), h('span', null, label))));
+    }
+    function setView(id) {
+      S.view = id;
+      renderTabs();
+      renderContent();
+    }
 
     function sourceCard(which, title) {
       const side = S[which];
@@ -28,7 +48,7 @@
         btn('Contrato abierto', () => useCurrent(which), 'small', 'file-code'));
       if (app.settings.showExamples) actions.appendChild(btn('Ejemplo', (e) => showMenu(e.currentTarget, Object.keys(O.EXAMPLES).map((k) => ({ label: O.EXAMPLES[k].title, onClick: () => useExample(which, k) }))), 'small', 'archive'));
       card.appendChild(actions);
-      card.append(h('p', { class: 'cmp-drop-hint muted' }, icon('upload'), h('span', null, 'O arrastra aquí ficheros YAML/JSON')),
+      card.append(h('p', { class: 'cmp-drop-hint muted' }, icon('upload'), h('span', null, 'O arrastra aquí ficheros YAML/JSON o su carpeta')),
         h('div', { class: 'cmp-drop', 'aria-hidden': 'true' }, icon('upload'), h('span', null, 'Suelta para usar como ' + title.toLowerCase())));
       dropTarget(card, which);
       return card;
@@ -42,8 +62,10 @@
       card.addEventListener('drop', (e) => {
         if (!hasFiles(e)) return;
         e.preventDefault(); depth = 0; over(false);
+        // Las entradas deben obtenerse durante el evento: después el DataTransfer deja de ser accesible.
+        const entries = Array.from(e.dataTransfer.items || []).filter((i) => i.kind === 'file' && i.webkitGetAsEntry).map((i) => i.webkitGetAsEntry()).filter(Boolean);
         const files = Array.from(e.dataTransfer.files);
-        load(which, () => O.fileio.readFileList(files));
+        load(which, () => O.fileio.readDropped(entries, files));
       });
     }
     function describe(project, label) {
@@ -53,7 +75,9 @@
     async function load(which, read) {
       try {
         const r = await read();
-        if (!r || !r.files.size) { if (r) app.toast('No se encontraron ficheros YAML/JSON', 'error'); return; }
+        if (!r) return;
+        if (r.skipped && r.skipped.length) app.toast('Se omitieron ' + r.skipped.length + ' fichero(s) de más de 8 MB', 'info');
+        if (!r.files.size) { app.toast('No se encontraron ficheros .yaml, .yml o .json. Usa ficheros de contrato o una carpeta que los contenga; la selección actual no ha cambiado.', 'error'); return; }
         const root = await app.chooseRoot(r.files);
         if (!root) return;
         const p = O.project.Project.fromFiles(r.files, root, r.folderName || O.util.basename(root));
@@ -101,47 +125,61 @@
         sourceCard('next', 'Contrato comparado')));
       const opts = h('div', { class: 'row wrap cmp-opts' }, F.field('Extensiones x-*', (() => { const s = h('select', { 'aria-label': 'Tratamiento de extensiones x-*' }, h('option', { value: 'informative' }, 'Informativas'), h('option', { value: 'blocking' }, 'Bloqueantes (incompatibles)'), h('option', { value: 'ignore' }, 'Ignorar')); s.value = S.xMode; s.addEventListener('change', () => { S.xMode = s.value; if (S.result) run(); }); return s; })()));
       el.appendChild(opts);
-      if (S.running) { el.appendChild(h('div', { class: 'activity' }, icon('loader'), h('span', null, 'Comparando contratos...'))); return; }
-      if (!S.result) { el.appendChild(h('div', { class: 'empty-state' }, h('img', { src: 'assets/contract-map.svg', alt: '' }), h('p', { class: 'muted' }, 'Elige el contrato base y el comparado para ver las diferencias semánticas.'))); return; }
-      renderResult();
+      content = h('div', { class: 'cmp-content' });
+      el.appendChild(content);
+      renderTabs();
+      renderContent();
     }
 
-    function renderResult() {
+    function emptyState(msg) { return h('div', { class: 'empty-state' }, h('img', { src: 'assets/contract-map.svg', alt: '' }), h('p', { class: 'muted' }, msg)); }
+    function renderContent() {
+      content.textContent = '';
+      const view = currentView();
+      content.className = 'cmp-content view-' + view;
+      if (S.running) { content.appendChild(h('div', { class: 'activity' }, icon('loader'), h('span', null, 'Comparando contratos...'))); return; }
+      const both = !!(S.base && S.next);
+      if (view === 'yaml') { content.appendChild(both ? textDiff() : emptyState('Elige el contrato base y el comparado para ver el diff textual por fichero.')); return; }
+      if (view === 'form') { content.appendChild(S.result ? semantic() : emptyState(both ? 'Pulsa «Comparar» para ver las diferencias semánticas.' : 'Elige el contrato base y el comparado para ver las diferencias semánticas.')); return; }
+      if (!both) { content.appendChild(emptyState('Elige el contrato base y el comparado para ver las diferencias semánticas y el diff textual.')); return; }
+      content.appendChild(h('div', { class: 'cmp-split' },
+        h('section', { class: 'cmp-pane', 'aria-label': 'Cambios semánticos' }, S.result ? semantic() : h('p', { class: 'muted pad' }, 'Pulsa «Comparar» para ver los cambios semánticos.')),
+        h('section', { class: 'cmp-pane', 'aria-label': 'Diff textual por fichero' }, textDiff())));
+    }
+
+    function semantic() {
       const r = S.result; const sum = r.summary;
       const wrap = h('div', { class: 'cmp-result' });
       if (r.incomplete) {
         wrap.appendChild(h('div', { class: 'callout error' }, icon('alert-triangle'), h('div', null, h('strong', null, 'Comparación incompleta: '), 'hay referencias sin resolver o errores de sintaxis; esos elementos no se consideran iguales.', h('ul', { class: 'detail-list' }, r.sideErrors.slice(0, 8).map((e) => h('li', null, '[' + e.side + '] ' + e.file + ' ' + e.path + ': ' + e.message)), r.sideErrors.length > 8 ? h('li', null, '... y ' + (r.sideErrors.length - 8) + ' más') : null))));
       }
       const chipDefs = [['added', sum.added], ['removed', sum.removed], ['modified', sum.modified], ['renamed', (sum.renamed || 0) + (sum.moved || 0)], ['error', sum.error], ['unchanged', sum.unchanged]];
-      const chips = h('div', { class: 'chips-bar' }, chipDefs.map(([k, n]) => h('button', { type: 'button', class: 'sev-chip kind-' + k + (S.filters.kinds.has(k) ? ' on' : ''), 'aria-pressed': S.filters.kinds.has(k) ? 'true' : 'false', onclick: () => { const ks = S.filters.kinds; if (k === 'renamed') { ['renamed', 'moved'].forEach((x) => (ks.has(x) ? ks.delete(x) : ks.add(x))); } else if (ks.has(k)) ks.delete(k); else ks.add(k); renderResult2(); } }, h('span', { class: 'kglyph' }, KIND[k][0]), h('span', null, n + ' ' + KIND[k][1].toLowerCase() + (k === 'renamed' ? '/movidos' : '')))),
+      const chips = h('div', { class: 'chips-bar' }, chipDefs.map(([k, n]) => h('button', { type: 'button', class: 'sev-chip kind-' + k + (S.filters.kinds.has(k) ? ' on' : ''), 'aria-pressed': S.filters.kinds.has(k) ? 'true' : 'false', onclick: () => { const ks = S.filters.kinds; if (k === 'renamed') { ['renamed', 'moved'].forEach((x) => (ks.has(x) ? ks.delete(x) : ks.add(x))); } else if (ks.has(k)) ks.delete(k); else ks.add(k); refreshSemantic(); } }, h('span', { class: 'kglyph' }, KIND[k][0]), h('span', null, n + ' ' + KIND[k][1].toLowerCase() + (k === 'renamed' ? '/movidos' : '')))),
         h('span', { class: 'badge ' + (sum.breaking ? 'err' : 'ok'), title: 'Clasificación orientativa; no garantiza compatibilidad' }, sum.breaking + ' potencialmente incompatibles'));
       wrap.appendChild(chips);
       const tags = Array.from(new Set(r.changes.flatMap((c) => c.tags || []))).sort();
       const areas = Array.from(new Set(r.changes.map((c) => c.area))).sort();
-      const sel = (label, key, opts) => { const s = h('select', { 'aria-label': label }, h('option', { value: '' }, label), opts.map((o) => h('option', { value: o }, o))); s.value = S.filters[key]; s.addEventListener('change', () => { S.filters[key] = s.value; renderResult2(); }); return s; };
+      const sel = (label, key, opts) => { const s = h('select', { 'aria-label': label }, h('option', { value: '' }, label), opts.map((o) => h('option', { value: o }, o))); s.value = S.filters[key]; s.addEventListener('change', () => { S.filters[key] = s.value; refreshSemantic(); }); return s; };
       const q = h('input', { type: 'search', class: 'mini-search', placeholder: 'Buscar cambios...', value: S.filters.q, 'aria-label': 'Buscar cambios' });
       q.addEventListener('input', () => { S.filters.q = q.value; clearTimeout(q._t); q._t = setTimeout(fillBody, 150); });
-      const brk = h('div', { class: 'seg', role: 'group', 'aria-label': 'Compatibilidad' }, [['all', 'Todos'], ['yes', 'Incompatibles'], ['no', 'Compatibles']].map(([k, l]) => h('button', { type: 'button', class: S.filters.breaking === k ? 'on' : '', onclick: () => { S.filters.breaking = k; renderResult2(); } }, l)));
+      const brk = h('div', { class: 'seg', role: 'group', 'aria-label': 'Compatibilidad' }, [['all', 'Todos'], ['yes', 'Incompatibles'], ['no', 'Compatibles']].map(([k, l]) => h('button', { type: 'button', class: S.filters.breaking === k ? 'on' : '', onclick: () => { S.filters.breaking = k; refreshSemantic(); } }, l)));
       const exp = btn('Exportar', (e) => showMenu(e.currentTarget, [
         { label: 'Markdown (.md)', icon: 'file-text', onClick: () => exportAs('md') }, { label: 'HTML (.html)', icon: 'file-code', onClick: () => exportAs('html') }, { label: 'JSON (.json)', icon: 'braces', onClick: () => exportAs('json') }]), '', 'download');
       wrap.appendChild(h('div', { class: 'row wrap cmp-filters' }, q, brk, sel('Todos los tags', 'tag', tags), sel('Todos los métodos', 'method', O.util.HTTP_METHODS), sel('Todas las áreas', 'area', areas), h('span', { class: 'spacer' }), exp));
-      wrap.appendChild(h('div', { class: 'tabs small' }, [['changes', 'Cambios semánticos'], ['text', 'Diff textual por fichero']].map(([id, l]) => h('button', { type: 'button', role: 'tab', class: 'tab' + (S.view === id ? ' active' : ''), onclick: () => { S.view = id; renderResult2(); } }, l))));
       const body = h('div', { class: 'cmp-body' });
       wrap.appendChild(body);
-      el.appendChild(wrap);
       S._body = body;
       fillBody();
+      return wrap;
     }
-    function renderResult2() {
-      const resultEl = el.querySelector('.cmp-result');
-      if (resultEl) resultEl.remove();
-      renderResult();
+    /** Repinta solo los cambios semánticos (filtros) sin rehacer el diff textual de la vista dividida. */
+    function refreshSemantic() {
+      const old = content && content.querySelector('.cmp-result');
+      if (old) old.replaceWith(semantic());
     }
 
     function fillBody() {
       const body = S._body;
       body.textContent = '';
-      if (S.view === 'text') { body.appendChild(textDiff()); return; }
       const list = filtered();
       const groups = new Map();
       const add = (g, c) => { if (!groups.has(g)) groups.set(g, []); groups.get(g).push(c); };
@@ -217,7 +255,13 @@
     }
 
     render();
-    return { el, refresh: render };
+    /** La vista dividida no cabe en pantallas estrechas: igual que en el editor, se vuelve a Formulario. */
+    function onResize() {
+      const was = S.view;
+      renderTabs();
+      if (S.view !== was) renderContent();
+    }
+    return { el, head, refresh: render, onResize };
   }
 
   O.compareView = { create };
