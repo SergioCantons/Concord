@@ -5,7 +5,7 @@ Herramienta local (HTML + CSS + JavaScript, sin framework, sin servidor y sin re
 
 1. Descomprime o copia la carpeta del proyecto.
 2. Haz doble clic en `index.html`. Funciona desde `file://`; no hace falta Node, `npm` ni servidor. Las dependencias ya están empaquetadas en `vendor/`.
-3. Desde la pantalla de inicio: crear un contrato desde plantilla, abrir una carpeta, abrir ficheros sueltos, cargar un ejemplo o comparar dos contratos.
+3. La aplicación arranca sin ningún contrato abierto. Desde la pantalla de inicio puedes abrir una carpeta o ficheros sueltos (también arrastrándolos), crear un contrato desde plantilla, reabrir un contrato reciente, cargar un ejemplo (si están activados en Ajustes) o comparar dos contratos.
 
 Guía breve:
 
