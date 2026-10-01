@@ -42,7 +42,7 @@
   /** Severidad efectiva de una regla de serie en el contrato actual. */
   app.ruleSeverity = (id) => { const r = O.validate.BUILTIN_RULES.find((x) => x.id === id); return r ? O.validate.effectiveSeverity(r, app.validationConfig().rules) : 'off'; };
   app.openRules = (opts) => O.rulesUI.open(app, opts);
-  app.exampleMenuItems = () => app.settings.showExamples ? Object.keys(O.EXAMPLES).map((k) => ({ label: O.EXAMPLES[k].title, icon: 'archive', onClick: () => guarded(() => openExample(k)) })) : [];
+  app.exampleMenuItems = () => app.settings.showExamples ? Object.keys(O.EXAMPLES).map((k) => ({ label: O.EXAMPLES[k].title, icon: 'archive', onClick: () => openExample(k) })) : [];
 
   /* ---------- Actividad ---------- */
   app.busy = function (on) { app.busyCount = Math.max(0, app.busyCount + (on ? 1 : -1)); document.body.classList.toggle('busy', app.busyCount > 0); };
@@ -128,13 +128,14 @@
   app.togglePanel = function () { app.panelOpen = !app.panelOpen; app.validationPanel.setCollapsed(!app.panelOpen); document.body.classList.toggle('panel-collapsed', !app.panelOpen); };
 
   /* ---------- Render ---------- */
-  function renderAll() { app.explorer.refresh(); renderMain(); renderToolbar(); }
+  function renderAll() { updateMode(); if (app.project) app.explorer.refresh(); renderMain(); renderToolbar(); }
   app.rerender = function () { renderMain(); };
 
   function renderMain() {
     const main = $('main-body');
     const head = $('main-head');
     if (app.mode === 'compare') { head.textContent = ''; head.style.display = ''; head.appendChild(app.compareView.head); return; }
+    if (!app.project) { renderHome(); return; }
     head.style.display = '';
     const oldScroll = main.querySelector('.form-pane') ? main.querySelector('.form-pane').scrollTop : 0;
     head.textContent = '';
@@ -169,6 +170,7 @@
     const P = app.project;
     const bar = $('toolbar');
     bar.textContent = '';
+    if (!P) { renderEmptyToolbar(bar); return; }
     const dirty = P.isDirty();
     const name = h('button', { type: 'button', class: 'proj-name', title: 'Cambiar el nombre del proyecto', onclick: async () => { const v = await app.prompt({ title: 'Nombre del proyecto', label: 'Nombre', value: P.name }); if (v) { P.name = v; renderToolbar(); } } }, P.name || 'contrato');
     const status = h('span', { class: 'status ' + (dirty ? 'dirty' : 'clean'), role: 'status' }, h('span', { class: 'dot' }), h('span', { class: 'lbl' }, dirty ? 'Cambios sin guardar' : 'Guardado'));
@@ -184,7 +186,7 @@
       h('div', { class: 'proj' }, name, P.isExample ? h('span', { class: 'badge example', title: 'Contrato de ejemplo ficticio' }, 'Ejemplo') : null, status),
       h('span', { class: 'spacer' }),
       h('div', { class: 'tool-group' },
-        iconBtn('file-plus', 'Nuevo contrato', (e) => showMenu(e.currentTarget, [{ label: 'Contrato vacío', icon: 'file-plus', onClick: () => guarded(() => app.loadProject(Project.newEmpty(), {})) }].concat(app.settings.showExamples ? [{ separator: true }, { header: 'Ejemplos' }].concat(app.exampleMenuItems()) : []))),
+        iconBtn('file-plus', 'Nuevo contrato', (e) => showMenu(e.currentTarget, newMenuItems())),
         iconBtn('folder-open', 'Abrir contrato', (e) => openMenu(e.currentTarget)),
         iconBtn('save', 'Guardar contrato', () => O.saveUI.open(app), 'primary-soft')),
       h('div', { class: 'tool-group' }, iconBtn('undo-2', 'Deshacer', () => doUndo(), '', { disabled: !P.canUndo() }), iconBtn('redo-2', 'Rehacer', () => doRedo(), '', { disabled: !P.canRedo() })),
@@ -194,6 +196,61 @@
         iconBtn('settings', 'Ajustes', () => settingsDialog())));
     document.title = (P.name || 'contrato') + (dirty ? ' \u2022' : '') + ' \u2014 Editor OpenAPI';
   }
+  /** Barra sin contrato abierto: solo acciones que no dependen de él. */
+  function renderEmptyToolbar(bar) {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    bar.append(
+      h('div', { class: 'brand' }, h('img', { src: 'assets/logo.svg', alt: '', width: 26, height: 26 }), h('span', { class: 'brand-name' }, 'OpenAPI')),
+      h('span', { class: 'spacer' }),
+      h('div', { class: 'tool-group' }, iconBtn('file-plus', 'Nuevo contrato', (e) => showMenu(e.currentTarget, newMenuItems())), iconBtn('folder-open', 'Abrir contrato', (e) => openMenu(e.currentTarget))),
+      h('div', { class: 'tool-group' },
+        iconBtn('git-compare', 'Comparar contratos', () => app.setMode(app.mode === 'compare' ? 'edit' : 'compare'), app.mode === 'compare' ? 'active' : ''),
+        iconBtn(dark ? 'sun' : 'moon', dark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro', () => app.toggleTheme(), 'theme-toggle'),
+        iconBtn('settings', 'Ajustes', () => settingsDialog())));
+    document.title = 'Editor OpenAPI';
+  }
+  const newMenuItems = () => [{ label: 'Contrato vacío', icon: 'file-plus', onClick: () => guarded(() => app.loadProject(Project.newEmpty(), {})) }].concat(app.settings.showExamples ? [{ separator: true }, { header: 'Ejemplos' }].concat(app.exampleMenuItems()) : []);
+
+  /* ---------- Pantalla de inicio (sin contrato abierto) ---------- */
+  let homeSeq = 0;
+  function renderHome() {
+    const slot = $('home-slot');
+    slot.textContent = '';
+    const card = (ic, title, hint, onClick) => h('button', { type: 'button', class: 'home-card', onclick: onClick }, icon(ic), h('span', { class: 'home-card-text' }, h('strong', null, title), h('small', null, hint)));
+    const recentBox = h('div', { class: 'home-list', 'aria-live': 'polite' });
+    const drop = h('div', { class: 'home-drop' }, icon('upload'), h('span', null, 'O arrastra aquí la carpeta del contrato o sus ficheros YAML/JSON'));
+    const col = (title, body) => h('section', { class: 'home-col' }, h('h2', null, title), body);
+    const examples = app.settings.showExamples ? col('Ejemplos', h('div', { class: 'home-list' }, Object.keys(O.EXAMPLES).map((k) => h('button', { type: 'button', class: 'home-item', onclick: () => openExample(k) }, icon('archive'), h('span', null, O.EXAMPLES[k].title.replace(/^Ejemplo: /, '')))))) : null;
+    slot.appendChild(h('div', { class: 'home' },
+      h('div', { class: 'home-hero' }, h('img', { src: 'assets/logo.svg', alt: '', width: 56, height: 56 }), h('div', null, h('h1', null, 'Editor y comparador OpenAPI'), h('p', { class: 'muted' }, 'No hay ningún contrato abierto. Abre uno existente, crea uno nuevo o compara dos contratos. Todo se procesa en tu equipo.'))),
+      h('div', { class: 'home-actions' },
+        card('folder-open', O.fileio.hasFsAccess ? 'Abrir carpeta' : 'Abrir carpeta (solo lectura)', 'Contrato fragmentado o con varios ficheros', () => openFolderFlow()),
+        card('file-up', 'Abrir ficheros', 'Uno o varios .yaml, .yml o .json', () => openFilesFlow()),
+        card('file-plus', 'Nuevo contrato', 'Empieza desde una plantilla vacía', () => app.loadProject(Project.newEmpty(), {})),
+        card('git-compare', 'Comparar contratos', 'Diferencias semánticas entre dos versiones', () => app.setMode('compare'))),
+      drop,
+      h('div', { class: 'home-cols' }, O.fileio.hasFsAccess ? col('Recientes', recentBox) : null, examples)));
+    homeDrop(drop);
+    const my = ++homeSeq;
+    if (O.fileio.hasFsAccess) app.recentMenuItems((rec) => guarded(async () => { app.busy(true); try { await openFromResult(await O.fileio.openRecent(rec)); } catch (e) { toast(e.message, 'error'); } finally { app.busy(false); } }), { empty: true }).then((items) => {
+      if (my !== homeSeq) return;
+      items.filter((it) => !it.header).forEach((it) => recentBox.appendChild(h('button', { type: 'button', class: 'home-item' + (it.danger ? ' danger' : ''), disabled: !!it.disabled, onclick: async () => { await it.onClick(); if (!app.project && app.mode !== 'compare') renderHome(); } }, icon(it.icon || 'history'), h('span', null, it.label), it.hint ? h('small', { class: 'muted' }, it.hint) : null)));
+    });
+  }
+  function homeDrop(zone) {
+    const hasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+    zone.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); zone.classList.add('over'); } });
+    zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+    zone.addEventListener('drop', async (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault(); zone.classList.remove('over');
+      const entries = Array.from(e.dataTransfer.items || []).filter((i) => i.kind === 'file' && i.webkitGetAsEntry).map((i) => i.webkitGetAsEntry()).filter(Boolean);
+      const files = Array.from(e.dataTransfer.files);
+      app.busy(true);
+      try { await openFromResult(await O.fileio.readDropped(entries, files)); } catch (err) { toast('No se pudo abrir: ' + err.message, 'error'); } finally { app.busy(false); }
+    });
+  }
+
   function doUndo() { if (app.yaml) app.yaml.flush(); const l = app.project.undo(); if (l) { toast('Deshecho: ' + l, 'info', 1800); renderAll(); } }
   function doRedo() { const l = app.project.redo(); if (l) { toast('Rehecho: ' + l, 'info', 1800); renderAll(); } }
   app.undo = doUndo; app.redo = doRedo;
@@ -201,10 +258,10 @@
   app.setMode = function (m) {
     app.mode = m; updateMode();
     if (m === 'compare') { document.body.classList.remove('sidebar-open'); $('compare-slot').style.display = ''; app.compareView.refresh(); renderMain(); }
-    else { $('compare-slot').style.display = 'none'; renderAll(); if (app.view !== 'form') syncYamlToSelection(); }
+    else { $('compare-slot').style.display = 'none'; renderAll(); if (app.project && app.view !== 'form') syncYamlToSelection(); }
     renderToolbar();
   };
-  function updateMode() { document.body.classList.toggle('mode-compare', app.mode === 'compare'); }
+  function updateMode() { document.body.classList.toggle('mode-compare', app.mode === 'compare'); document.body.classList.toggle('mode-home', !app.project && app.mode !== 'compare'); }
 
   /* ---------- Cambios en el proyecto ---------- */
   let rafSidebar = 0; let valTimer = null; let recTimer = null;
@@ -219,7 +276,7 @@
 
   /* ---------- Validación ---------- */
   app.validate = function (manual) {
-    if (app.validation.running && !manual) return;
+    if (!app.project || (app.validation.running && !manual)) return;
     const P = app.project; const v = P.version;
     app.validation.running = true; app.validationPanel.update(null, true); app.busy(true);
     setTimeout(() => {
@@ -253,6 +310,9 @@
     if (o.recent) O.fileio.addRecent(Object.assign({ rootFile: project.rootFile, name: project.name }, o.recent));
   };
   function openExample(key) {
+    return guarded(() => openExampleNow(key));
+  }
+  function openExampleNow(key) {
     const ex = O.EXAMPLES[key];
     app.loadProject(Project.fromFiles(ex.files, ex.root, key === 'fragmentado' ? 'API de Tienda (ejemplo)' : ex.title.replace(/^Ejemplo: /, '')), { example: true });
   }
@@ -321,7 +381,7 @@
   /** Ejecuta la acción tras confirmar qué hacer con los cambios sin guardar. */
   async function guarded(action) {
     if (app.yaml) app.yaml.flush();
-    if (!app.project.isDirty()) return action();
+    if (!app.project || !app.project.isDirty()) return action();
     const m = modal({ title: 'Cambios sin guardar', content: h('p', null, 'El contrato "' + app.project.name + '" tiene cambios sin guardar. Si continúas, se perderán (esta operación no se puede deshacer).'), cancelValue: 'cancel', actions: [{ label: 'Cancelar', value: 'cancel' }, { label: 'Guardar...', value: 'save' }, { label: 'Descartar cambios', kind: 'danger', value: 'discard' }] });
     const r = await m.promise;
     if (r === 'discard') return action();
@@ -336,10 +396,10 @@
     const chk = (key, label) => { const i = h('input', { type: 'checkbox', checked: !!S[key] }); i.addEventListener('change', () => { app.setSetting(key, i.checked); if (key === 'liveValidation') app.validationPanel.update(app.validation.result, false); else if (key === 'showExamples') { renderAll(); if (app.mode === 'compare') app.compareView.refresh(); } else app.validate(true); }); return h('label', { class: 'check' }, i, h('span', null, label)); };
     const sel = (key, label, opts) => { const s = h('select', { 'aria-label': label }, opts.map(([v, l]) => h('option', { value: v }, l))); s.value = S[key]; s.addEventListener('change', () => { app.setSetting(key, s.value); app.validate(true); }); return O.forms.field(label, s); };
     const rec = h('input', { type: 'checkbox', checked: !!S.recovery });
-    rec.addEventListener('change', () => { app.setSetting('recovery', rec.checked); if (rec.checked && app.project.isDirty()) O.fileio.saveRecovery(app.project); });
+    rec.addEventListener('change', () => { app.setSetting('recovery', rec.checked); if (rec.checked && app.project && app.project.isDirty()) O.fileio.saveRecovery(app.project); });
     const m = modal({ title: 'Ajustes', content: h('div', { class: 'stack' },
       O.forms.section('Validación'), chk('liveValidation', 'Validar automáticamente al editar (desactívalo en contratos muy grandes)'),
-      btn('Reglas de validación...', () => { m.close(null); app.openRules(); }, 'small', 'shield-check'),
+      btn('Reglas de validación...', () => { m.close(null); app.openRules(); }, 'small', 'shield-check', { disabled: !app.project, title: app.project ? null : 'Abre un contrato para configurar sus reglas' }),
       O.forms.section('Recuperación local'), h('label', { class: 'check' }, rec, h('span', null, 'Guardar una copia de recuperación del contrato con cambios en este navegador (almacenamiento local, solo si lo activas)')),
       btn('Borrar copia de recuperación', () => { O.fileio.clearRecovery(); toast('Copia de recuperación borrada', 'ok'); }, 'small', 'trash-2'),
       O.forms.section('Apariencia'), sel('theme', 'Tema', [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']]), chk('showExamples', 'Mostrar contratos de ejemplo en los menús'),
@@ -351,6 +411,7 @@
   /* ---------- Atajos y protección ---------- */
   document.addEventListener('keydown', (e) => {
     const t = e.target; const inText = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+    if (!app.project) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (app.mode === 'edit') O.saveUI.open(app); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (app.mode === 'edit') { document.body.classList.add('sidebar-open'); app.explorer.focusSearch(); } }
     else if ((e.ctrlKey || e.metaKey) && !inText && e.key.toLowerCase() === 'z' && !e.shiftKey && app.mode === 'edit') { e.preventDefault(); doUndo(); }
@@ -376,7 +437,8 @@
     $('compare-slot').style.display = 'none';
     $('scrim').addEventListener('click', () => document.body.classList.remove('sidebar-open'));
     app.validationPanel.setCollapsed(!app.panelOpen); document.body.classList.toggle('panel-collapsed', !app.panelOpen);
-    app.loadProject(Project.fromFiles(O.EXAMPLES.fragmentado.files, 'openapi.yaml', 'API de Tienda (ejemplo)'), { example: true });
+    // Se arranca sin contrato: pantalla de inicio para abrir, crear o comparar.
+    renderAll();
     const rec = app.settings.recovery ? O.fileio.loadRecovery() : null;
     if (rec && rec.files) {
       app.confirm({ title: 'Recuperar sesión anterior', message: 'Hay una copia de recuperación de "' + rec.name + '" guardada el ' + new Date(rec.ts).toLocaleString('es-ES') + '. ¿Quieres recuperarla?', confirmLabel: 'Recuperar', cancelLabel: 'Ignorar' }).then((ok) => { if (ok) { const p = Project.fromFiles(rec.files, rec.root, rec.name); app.loadProject(p, {}); } });

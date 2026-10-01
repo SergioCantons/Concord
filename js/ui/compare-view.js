@@ -45,7 +45,7 @@
       const actions = h('div', { class: 'row wrap' },
         btn('Carpeta...', () => load(which, O.fileio.openFolder), 'small', 'folder-open'),
         btn('Archivos...', () => load(which, O.fileio.openLooseFiles), 'small', 'file-up'),
-        btn('Contrato abierto', () => useCurrent(which), 'small', 'file-code'));
+        btn('Contrato abierto', () => useCurrent(which), 'small', 'file-code', { disabled: !app.project, title: app.project ? null : 'No hay ningún contrato abierto' }));
       if (O.fileio.hasFsAccess) actions.appendChild(btn('Recientes', async (e) => { const anchor = e.currentTarget; showMenu(anchor, await app.recentMenuItems((rec) => load(which, () => O.fileio.openRecent(rec)), { empty: true })); }, 'small', 'history'));
       if (app.settings.showExamples) actions.appendChild(btn('Ejemplo', (e) => showMenu(e.currentTarget, Object.keys(O.EXAMPLES).map((k) => ({ label: O.EXAMPLES[k].title, onClick: () => useExample(which, k) }))), 'small', 'archive'));
       card.appendChild(actions);
