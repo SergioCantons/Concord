@@ -37,7 +37,11 @@
     app.setSetting('theme', next);
     renderToolbar();
   };
-  app.validationConfig = () => ({ opIdUnique: app.settings.opIdUnique, opIdRequired: app.settings.opIdRequired, singleTag: app.settings.singleTag, tagsMustExist: app.settings.tagsMustExist });
+  /** Configuración de validación del contrato (.concord/); sin ella se usan los ajustes antiguos del navegador. */
+  app.validationConfig = () => O.ruleconfig.validationConfig(app.project, app.settings);
+  /** Severidad efectiva de una regla de serie en el contrato actual. */
+  app.ruleSeverity = (id) => { const r = O.validate.BUILTIN_RULES.find((x) => x.id === id); return r ? O.validate.effectiveSeverity(r, app.validationConfig().rules) : 'off'; };
+  app.openRules = (opts) => O.rulesUI.open(app, opts);
   app.exampleMenuItems = () => app.settings.showExamples ? Object.keys(O.EXAMPLES).map((k) => ({ label: O.EXAMPLES[k].title, icon: 'archive', onClick: () => guarded(() => openExample(k)) })) : [];
 
   /* ---------- Actividad ---------- */
@@ -255,7 +259,7 @@
   app.chooseRoot = async function (files) {
     let cands = O.fileio.detectRoots(files);
     if (cands.length === 1) return cands[0];
-    const all = Array.from(files.keys()).sort();
+    const all = Array.from(files.keys()).filter((p) => !O.project.isExtraPath(p)).sort();
     if (!cands.length) cands = all;
     if (!cands.length) return null;
     const radios = cands.map((p, i) => h('label', { class: 'radio-row' }, h('input', { type: 'radio', name: 'root', value: p, checked: i === 0 }), h('span', null, p)));
@@ -333,9 +337,9 @@
     const sel = (key, label, opts) => { const s = h('select', { 'aria-label': label }, opts.map(([v, l]) => h('option', { value: v }, l))); s.value = S[key]; s.addEventListener('change', () => { app.setSetting(key, s.value); app.validate(true); }); return O.forms.field(label, s); };
     const rec = h('input', { type: 'checkbox', checked: !!S.recovery });
     rec.addEventListener('change', () => { app.setSetting('recovery', rec.checked); if (rec.checked && app.project.isDirty()) O.fileio.saveRecovery(app.project); });
-    modal({ title: 'Ajustes', content: h('div', { class: 'stack' },
+    const m = modal({ title: 'Ajustes', content: h('div', { class: 'stack' },
       O.forms.section('Validación'), chk('liveValidation', 'Validar automáticamente al editar (desactívalo en contratos muy grandes)'),
-      sel('opIdUnique', 'operationId duplicado', [['error', 'Error'], ['warning', 'Aviso'], ['off', 'No comprobar']]), chk('opIdRequired', 'operationId obligatorio en todas las operaciones'), chk('singleTag', 'Exigir exactamente un tag por operación'), chk('tagsMustExist', 'Avisar de tags no declarados'),
+      btn('Reglas de validación...', () => { m.close(null); app.openRules(); }, 'small', 'shield-check'),
       O.forms.section('Recuperación local'), h('label', { class: 'check' }, rec, h('span', null, 'Guardar una copia de recuperación del contrato con cambios en este navegador (almacenamiento local, solo si lo activas)')),
       btn('Borrar copia de recuperación', () => { O.fileio.clearRecovery(); toast('Copia de recuperación borrada', 'ok'); }, 'small', 'trash-2'),
       O.forms.section('Apariencia'), sel('theme', 'Tema', [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']]), chk('showExamples', 'Mostrar contratos de ejemplo en los menús'),

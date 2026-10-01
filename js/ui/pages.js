@@ -166,7 +166,7 @@
       };
       idInput.addEventListener('input', check);
       idInput.addEventListener('change', () => {
-        if (!check() && app.settings.opIdUnique === 'error') { app.toast('operationId duplicado: elige otro', 'error'); idInput.value = op.operationId || ''; check(); return; }
+        if (!check() && app.ruleSeverity('opid-duplicate') === 'error') { app.toast('operationId duplicado: elige otro', 'error'); idInput.value = op.operationId || ''; check(); return; }
         const v = idInput.value.trim();
         app.edit('operationId', (tx) => tx.set(logical.concat(['operationId']), v === '' ? undefined : v), { coalesce: true });
       });

@@ -49,6 +49,8 @@
     const s = doc.toString({ lineWidth: 0, minContentWidth: 0, flowCollectionPadding: false });
     return eol === '\r\n' ? s.replace(/\r?\n/g, '\r\n') : s;
   }
+  const CONFIG_DIR = '.concord/';
+  const isExtraPath = (p) => typeof p === 'string' && p.startsWith(CONFIG_DIR);
   function detectEol(text) { return /\r\n/.test(text) ? '\r\n' : '\n'; }
 
   class Project {
@@ -63,15 +65,19 @@
       this.listeners = new Set();
       this._cache = {};
       this.lowerIndex = new Map();
+      // Ficheros de configuración de la herramienta (.concord/...): viajan con el contrato pero no forman parte de él.
+      this.extras = new Map();
+      this.extrasOriginal = new Map();
     }
 
     static fromFiles(files, rootFile, name) {
       const p = new Project();
       const entries = files instanceof Map ? Array.from(files.entries()) : Object.entries(files);
-      for (const [path, text] of entries) p._setFile(path, text);
-      p.rootFile = rootFile || (p.files.has('openapi.yaml') ? 'openapi.yaml' : entries.length ? entries[0][0] : null);
+      for (const [path, text] of entries) { if (isExtraPath(path)) p.extras.set(path, text); else p._setFile(path, text); }
+      p.rootFile = rootFile || (p.files.has('openapi.yaml') ? 'openapi.yaml' : p.files.size ? p.files.keys().next().value : null);
       p.name = name || (p.rootFile ? U.basename(p.rootFile).replace(/\.(ya?ml|json)$/i, '') : 'contrato');
       p.original = p._texts();
+      p.extrasOriginal = new Map(p.extras);
       return p;
     }
 
@@ -91,13 +97,24 @@
     _texts() { const m = new Map(); this.files.forEach((f, p) => m.set(p, f.text)); return m; }
     texts() { return this._texts(); }
     isDirty() {
-      if (this.hasDraft()) return true;
+      if (this.hasDraft() || this.extrasDirty()) return true;
       if (this.files.size !== this.original.size) return true;
       for (const [p, f] of this.files) if (this.original.get(p) !== f.text) return true;
       return false;
     }
     hasDraft() { for (const f of this.files.values()) if (f.draft) return true; return false; }
-    markSaved() { this.original = this._texts(); this._bump(); }
+    markSaved() { this.original = this._texts(); this.extrasOriginal = new Map(this.extras); this._bump(); }
+    /** Crea, modifica o (con null) elimina un fichero de configuración .concord/. */
+    setExtra(path, text) {
+      if (!isExtraPath(path)) throw new Error('Los ficheros de configuración deben estar en ' + CONFIG_DIR);
+      if (text === null || text === undefined) { if (!this.extras.delete(path)) return; } else if (this.extras.get(path) === text) return; else this.extras.set(path, text);
+      this._bump();
+    }
+    extrasDirty() {
+      if (this.extras.size !== this.extrasOriginal.size) return true;
+      for (const [p, x] of this.extras) if (this.extrasOriginal.get(p) !== x) return true;
+      return false;
+    }
     dirtyFiles() {
       const out = [];
       for (const [p, f] of this.files) { if (this.original.get(p) !== f.text) out.push(p); }
@@ -711,5 +728,5 @@
 
   Project.TEMPLATE = 'openapi: 3.0.3\ninfo:\n  title: Nuevo contrato\n  version: 1.0.0\n  description: Describe aquí el contrato.\nservers:\n  - url: https://api.ejemplo.com/v1\ntags: []\npaths: {}\ncomponents:\n  schemas: {}\n';
 
-  return { Project, Tx, COMPONENT_TYPES, NAME_MAPS, rootCtx, childCtx, skipKey, keyOf, findPair, refOf, parseText, stringifyDoc, detectEol, YAML };
+  return { Project, Tx, COMPONENT_TYPES, NAME_MAPS, rootCtx, childCtx, skipKey, keyOf, findPair, refOf, parseText, stringifyDoc, detectEol, YAML, CONFIG_DIR, isExtraPath };
 });

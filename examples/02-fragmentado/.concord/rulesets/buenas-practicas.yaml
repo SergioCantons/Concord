@@ -1,0 +1,33 @@
+# Conjunto de reglas de ejemplo en formato Spectral (https://docs.stoplight.io/docs/spectral).
+# Se guarda junto al contrato en .concord/rulesets/ y se puede activar, desactivar o editar
+# desde «Reglas de validación».
+x-concord-name: Buenas prácticas (ejemplo)
+description: Reglas de ejemplo para mostrar cómo se añaden reglas propias al contrato.
+rules:
+  operacion-con-descripcion:
+    description: Cada operación debe explicar qué hace con una descripción.
+    message: La operación no tiene description.
+    severity: info
+    given: $.paths[*][get,put,post,delete,patch]
+    then:
+      field: description
+      function: truthy
+  texto-con-longitud-maxima:
+    description: Los textos libres deben limitar su longitud con maxLength.
+    message: La propiedad «{{property}}» es un texto sin maxLength.
+    severity: warn
+    given: $..properties[?(@ && @.type == 'string' && !@.enum && !@.format)]
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          required: [maxLength]
+  parametros-query-camelcase:
+    description: Los parámetros de consulta se escriben en camelCase.
+    message: El parámetro «{{value}}» no está en camelCase.
+    severity: warn
+    given: $.paths[*][*].parameters[?(@.in == 'query')].name
+    then:
+      function: casing
+      functionOptions:
+        type: camel

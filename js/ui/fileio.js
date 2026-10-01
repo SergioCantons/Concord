@@ -138,7 +138,7 @@
   /** Detecta que ficheros parecen ser raices OpenAPI (contienen una clave openapi/swagger de primer nivel). */
   function detectRoots(files) {
     const out = [];
-    for (const [p, t] of files) if (/^\s*(["']?)(openapi|swagger)\1\s*:/m.test(t.slice(0, 4000))) out.push(p);
+    for (const [p, t] of files) if (!p.startsWith('.concord/') && /^\s*(["']?)(openapi|swagger)\1\s*:/m.test(t.slice(0, 4000))) out.push(p);
     return out.sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
   }
 
@@ -261,7 +261,7 @@
   const REC_KEY = 'oat.recovery.v1';
   function saveRecovery(project) {
     try {
-      const files = {}; project.files.forEach((f, p) => { files[p] = f.text; });
+      const files = {}; project.files.forEach((f, p) => { files[p] = f.text; }); project.extras.forEach((t, p) => { files[p] = t; });
       localStorage.setItem(REC_KEY, JSON.stringify({ name: project.name, root: project.rootFile, ts: Date.now(), files }));
       return true;
     } catch (e) { return false; }
