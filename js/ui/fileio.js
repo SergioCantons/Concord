@@ -54,12 +54,49 @@
     }
     return { files, skipped, folderName: withRel && arr[0] ? arr[0].webkitRelativePath.split('/')[0] : '' };
   }
+  /** Lo que hay que capturar durante el evento drop (después el DataTransfer deja de ser accesible). */
+  function captureDrop(dt) {
+    const items = Array.from((dt && dt.items) || []).filter((i) => i.kind === 'file');
+    return {
+      files: Array.from((dt && dt.files) || []),
+      entries: items.map((i) => (i.webkitGetAsEntry ? i.webkitGetAsEntry() : null)).filter(Boolean),
+      handles: items.map((i) => (i.getAsFileSystemHandle ? i.getAsFileSystemHandle().catch(() => null) : null)).filter(Boolean)
+    };
+  }
   /**
-   * Lee lo soltado con arrastrar y soltar. Con entradas del sistema de ficheros (webkitGetAsEntry) se recorren
-   * también carpetas conservando las rutas relativas; si no hay entradas, se usan los ficheros tal cual.
+   * Lee lo soltado con arrastrar y soltar (resultado de captureDrop). Si solo hay ficheros se leen directamente;
+   * las carpetas se recorren con File System Access y, si no está disponible, con webkitGetAsEntry.
+   * Desde file:// Chrome no deja leer ficheros vía webkitGetAsEntry (EncodingError), de ahí el orden.
    */
-  async function readDropped(entries, fileList) {
-    if (!entries || !entries.length) return readFileList(fileList || []);
+  async function readDropped(drop) {
+    const hasDir = drop.entries.some((e) => e.isDirectory);
+    if (!hasDir) return readFileList(drop.files);
+    const handles = (await Promise.all(drop.handles)).filter(Boolean);
+    if (handles.length) {
+      try { return await readDroppedHandles(handles); } catch (e) { /* se intenta con las entradas */ }
+    }
+    try { return await readDroppedEntries(drop.entries); } catch (e) {
+      if (e && e.name === 'EncodingError') throw new Error('El navegador no permite leer carpetas soltadas en esta página. Usa «Abrir carpeta» o suelta los ficheros directamente.');
+      throw e;
+    }
+  }
+  async function readDroppedHandles(handles) {
+    const single = handles.length === 1 && handles[0].kind === 'directory' ? handles[0] : null;
+    if (single) return Object.assign(await readDirHandle(single), { folderName: single.name });
+    const files = new Map(); const skipped = [];
+    for (const hd of handles) {
+      if (hd.kind === 'directory') {
+        if (SKIP_DIR.test(hd.name)) continue;
+        const r = await readDirHandle(hd);
+        r.files.forEach((t, p) => files.set(hd.name + '/' + p, t)); skipped.push(...r.skipped);
+      } else if (YAML_RE.test(hd.name)) {
+        const f = await hd.getFile();
+        if (f.size > MAX_BYTES) skipped.push(hd.name + ' (más de 8 MB)'); else files.set(hd.name, await f.text());
+      }
+    }
+    return { files, skipped, folderName: '' };
+  }
+  async function readDroppedEntries(entries) {
     const files = new Map();
     const skipped = [];
     const fileOf = (entry) => new Promise((res, rej) => entry.file(res, rej));
@@ -269,5 +306,5 @@
   function loadRecovery() { try { const v = localStorage.getItem(REC_KEY); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function clearRecovery() { try { localStorage.removeItem(REC_KEY); } catch (e) { /* ignore */ } }
 
-  O.fileio = { hasFsAccess, hasFilePicker, safePath, openFolder, openLooseFiles, readFileList, readDropped, detectRoots, dirIo, download, downloadText, downloadZip, addRecent, listRecents, removeRecent, recentPermission, openRecent, clearRecents, recentKind, saveRecovery, loadRecovery, clearRecovery };
+  O.fileio = { hasFsAccess, hasFilePicker, safePath, openFolder, openLooseFiles, readFileList, readDropped, captureDrop, detectRoots, dirIo, download, downloadText, downloadZip, addRecent, listRecents, removeRecent, recentPermission, openRecent, clearRecents, recentKind, saveRecovery, loadRecovery, clearRecovery };
 })();
