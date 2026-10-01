@@ -244,10 +244,9 @@
     zone.addEventListener('drop', async (e) => {
       if (!hasFiles(e)) return;
       e.preventDefault(); zone.classList.remove('over');
-      const entries = Array.from(e.dataTransfer.items || []).filter((i) => i.kind === 'file' && i.webkitGetAsEntry).map((i) => i.webkitGetAsEntry()).filter(Boolean);
-      const files = Array.from(e.dataTransfer.files);
+      const drop = O.fileio.captureDrop(e.dataTransfer);
       app.busy(true);
-      try { await openFromResult(await O.fileio.readDropped(entries, files)); } catch (err) { toast('No se pudo abrir: ' + err.message, 'error'); } finally { app.busy(false); }
+      try { await openFromResult(await O.fileio.readDropped(drop)); } catch (err) { toast('No se pudo abrir: ' + err.message, 'error'); } finally { app.busy(false); }
     });
   }
 

@@ -64,9 +64,8 @@
         if (!hasFiles(e)) return;
         e.preventDefault(); depth = 0; over(false);
         // Las entradas deben obtenerse durante el evento: después el DataTransfer deja de ser accesible.
-        const entries = Array.from(e.dataTransfer.items || []).filter((i) => i.kind === 'file' && i.webkitGetAsEntry).map((i) => i.webkitGetAsEntry()).filter(Boolean);
-        const files = Array.from(e.dataTransfer.files);
-        load(which, () => O.fileio.readDropped(entries, files));
+        const drop = O.fileio.captureDrop(e.dataTransfer);
+        load(which, () => O.fileio.readDropped(drop));
       });
     }
     function describe(project, label) {
