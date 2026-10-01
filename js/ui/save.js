@@ -48,19 +48,29 @@
       spinner.style.display = '';
       const my = ++seq;
       timer = setTimeout(() => {
-        try { plan = st.mode === 'inplace' ? planInPlace() : O.exporter.planExport(P, { mode: st.mode, rootName: st.rootName, outDir: st.outDir, target: st.target, strategy: st.strategy, naming: st.naming, customRules: st.customRules, groupNames: st.groupNames }); plan.error = null; }
+        try { plan = st.mode === 'inplace' ? planInPlace() : withExtras(O.exporter.planExport(P, { mode: st.mode, rootName: st.rootName, outDir: st.outDir, target: st.target, strategy: st.strategy, naming: st.naming, customRules: st.customRules, groupNames: st.groupNames })); plan.error = null; }
         catch (e) { plan = { error: e.message, files: new Map(), preview: { created: [], modified: [], unchanged: [], unused: [] }, groups: [], notes: [], verification: { ok: false, errors: [] } }; }
         if (my !== seq) return;
         spinner.style.display = 'none';
         renderPreview();
       }, 40);
     }
+    /** La configuración de validación (.concord/) acompaña al contrato también al reorganizarlo. */
+    function withExtras(pl) {
+      if (!P.extras.size) return pl;
+      const dir = O.util.normalizePath(st.outDir || '');
+      P.extras.forEach((t, p) => { const out = dir ? dir + '/' + p : p; pl.files.set(out, t); if (!pl.preview.created.includes(out) && !pl.preview.modified.includes(out)) pl.preview.modified.push(out); });
+      return pl;
+    }
     function planInPlace() {
       const files = P.texts();
-      const orig = P.original;
-      const pv = { created: [], modified: [], unchanged: [], unused: [] };
+      const orig = new Map(P.original);
+      P.extras.forEach((t, p) => files.set(p, t));
+      P.extrasOriginal.forEach((t, p) => orig.set(p, t));
+      const pv = { created: [], modified: [], unchanged: [], unused: [], removed: [] };
       for (const [p, t] of files) { if (!orig.has(p)) pv.created.push(p); else if (orig.get(p) !== t) pv.modified.push(p); else pv.unchanged.push(p); }
-      for (const p of orig.keys()) if (!files.has(p)) pv.unused.push(p);
+      // Los ficheros de configuración eliminados en la aplicación se borran también de la carpeta; los del contrato nunca.
+      for (const p of orig.keys()) if (!files.has(p)) (O.project.isExtraPath(p) ? pv.removed : pv.unused).push(p);
       const val = O.validate.validateProject(P, app.validationConfig());
       const errs = val.diagnostics.filter((d) => d.severity === 'error');
       return { files, rootPath: P.rootFile, preview: pv, groups: [], notes: P.hasDraft() ? ['Hay un borrador YAML sin aplicar: se guarda el último estado válido de ese fichero.'] : [], verification: { ok: true, inPlace: true, outputErrors: errs.length, errors: errs.slice(0, 5).map((d) => (d.file ? d.file + ': ' : '') + d.message) } };
@@ -80,7 +90,7 @@
       const pv = plan.preview;
       const dest = folder ? 'Se escribirá en la carpeta «' + folder.name + '».' : 'Se descargará como ' + (plan.files.size > 1 ? 'ZIP' : 'fichero') + ' (el navegador no concede acceso de escritura a carpetas).';
       preview.appendChild(h('p', { class: 'muted' }, dest));
-      preview.appendChild(h('div', { class: 'pv-cols' }, list('Nuevos', pv.created, 'created'), list('Modificados', pv.modified, 'modified'), list('Sin cambios', pv.unchanged, 'unchanged'), list('Sin uso (no se eliminan)', pv.unused, 'unused')));
+      preview.appendChild(h('div', { class: 'pv-cols' }, list('Nuevos', pv.created, 'created'), list('Modificados', pv.modified, 'modified'), list('Sin cambios', pv.unchanged, 'unchanged'), list('Sin uso (no se eliminan)', pv.unused, 'unused'), list('Se eliminan (configuración de validación)', pv.removed || [], 'unused')));
       if (plan.groups && plan.groups.length) {
         const rows = plan.groups.map((g) => {
           const rel = st.outDir ? g.file.slice(O.util.normalizePath(st.outDir).length + 1) : g.file;
@@ -118,6 +128,9 @@
         });
         if (res.cancelled) { app.toast('Guardado cancelado: no se ha escrito nada', 'info'); return false; }
         if (!res.ok) { await app.confirm({ title: 'No se pudo guardar', message: res.error + (res.rolledBack ? ' Los cambios ya escritos se han revertido.' : res.restoreErrors && res.restoreErrors.length ? ' Atención: no se pudieron revertir: ' + res.restoreErrors.join(', ') + '. Restaura desde ' + (res.backupDir || '.oat-backup') + '.' : ''), confirmLabel: 'Entendido', cancelLabel: 'Cerrar' }); return false; }
+        for (const p of (plan.preview && plan.preview.removed) || []) {
+          try { if (await io.exists(p)) await io.remove(p); } catch (e) { app.toast('No se pudo eliminar ' + p + ': ' + e.message, 'error'); }
+        }
         if (structural) app.loadProject(O.project.Project.fromFiles(plan.files, plan.rootPath, P.name), { folder, saved: true, keepName: true });
         else P.markSaved();
         O.fileio.clearRecovery();

@@ -5,7 +5,47 @@
 })(typeof self !== 'undefined' ? self : this, function (U, P, B, vendor) {
   'use strict';
 
-  const DEFAULT_CONFIG = { opIdUnique: 'error', opIdRequired: false, singleTag: false, tagsMustExist: true, structural: true };
+  const DEFAULT_CONFIG = { structural: true, rules: {}, rulesets: [] };
+
+  /**
+   * Catálogo de reglas de serie. `locked`: siempre activas con su severidad (sintaxis, referencias y estructura OpenAPI);
+   * el resto admite cambiar la severidad o desactivarse ('off'). `codes` agrupa los códigos de diagnóstico que emite la regla.
+   */
+  const BUILTIN_RULES = [
+    { id: 'yaml-syntax', category: 'YAML', severity: 'error', locked: true, codes: ['yaml-syntax', 'yaml-draft'], title: 'Sintaxis YAML válida', description: 'Cada fichero debe ser YAML o JSON bien formado. Un borrador inválido del editor YAML no se aplica hasta corregirlo.' },
+    { id: 'refs', category: 'Referencias', severity: 'error', locked: true, codes: ['ref-missing-file', 'ref-missing-pointer', 'ref-remote', 'ref-outside', 'ref-anchor', 'ref-loop', 'ref-kind'], title: 'Referencias ($ref) resolubles', description: 'Todo $ref debe apuntar a un fichero de la carpeta del proyecto y a un destino existente del tipo adecuado (un parámetro a components/parameters, un schema a components/schemas...). Las referencias remotas no se permiten.', example: { valid: '$ref: "#/components/schemas/Producto"', invalid: '$ref: "#/components/schemas/NoExiste"' } },
+    { id: 'structure', category: 'Estructura', severity: 'error', locked: true, codes: ['no-root', 'root-not-object', 'oas-version', 'oas31', 'truncated'], prefix: 'oas-', title: 'Estructura OpenAPI 3.0', description: 'El contrato debe cumplir el esquema oficial de OpenAPI 3.0 (campos obligatorios, tipos, nombres de componentes...).' },
+    { id: 'ref-siblings', category: 'Referencias', severity: 'warning', title: 'Sin propiedades junto a $ref', description: 'En OpenAPI 3.0 las propiedades hermanas de un $ref se ignoran; conviene moverlas al destino.', example: { valid: 'schema:\n  $ref: "#/components/schemas/Id"', invalid: 'schema:\n  $ref: "#/components/schemas/Id"\n  description: Se ignora' } },
+    { id: 'path-format', category: 'Rutas', severity: 'error', title: 'Las rutas empiezan por "/"', description: 'Cada clave de paths debe empezar por una barra.', example: { valid: '/productos:', invalid: 'productos:' } },
+    { id: 'path-duplicate', category: 'Rutas', severity: 'error', title: 'Rutas no duplicadas', description: 'Dos rutas que solo difieren en el nombre de sus parámetros son la misma ruta.', example: { valid: '/productos/{id}:', invalid: '/productos/{id}:\n/productos/{productoId}:' } },
+    { id: 'param-duplicate', category: 'Parámetros', severity: 'error', title: 'Parámetros no duplicados', description: 'Una operación no puede declarar dos veces el mismo parámetro (mismo nombre y ubicación).' },
+    { id: 'path-param-missing', category: 'Parámetros', severity: 'error', title: 'Parámetros de ruta declarados', description: 'Cada {parámetro} de la ruta debe declararse como parámetro in: path.', example: { valid: '/productos/{id}:\n  get:\n    parameters:\n      - name: id\n        in: path\n        required: true', invalid: '/productos/{id}:\n  get:\n    parameters: []' } },
+    { id: 'path-param-unused', category: 'Parámetros', severity: 'error', title: 'Parámetros de ruta usados', description: 'Un parámetro in: path debe aparecer en la ruta.' },
+    { id: 'path-param-required', category: 'Parámetros', severity: 'error', title: 'Parámetros de ruta obligatorios', description: 'Los parámetros in: path deben tener required: true.' },
+    { id: 'opid-duplicate', category: 'Operaciones', severity: 'error', title: 'operationId único', description: 'Cada operación debe tener un operationId distinto.' },
+    { id: 'opid-missing', category: 'Operaciones', severity: 'off', title: 'operationId obligatorio', description: 'Todas las operaciones deben definir operationId.' },
+    { id: 'body-in-get', category: 'Operaciones', severity: 'warning', title: 'Sin requestBody en GET/HEAD', description: 'Un cuerpo de petición en GET o HEAD no tiene semántica definida.' },
+    { id: 'tag-undefined', category: 'Tags', severity: 'warning', title: 'Tags declarados', description: 'Los tags usados en las operaciones deben declararse en la lista tags del contrato.' },
+    { id: 'tag-single', category: 'Tags', severity: 'off', title: 'Un único tag por operación', description: 'Cada operación debe tener exactamente un tag.' },
+    { id: 'response-code', category: 'Respuestas', severity: 'error', title: 'Códigos de respuesta válidos', description: 'Las respuestas usan códigos HTTP de 100 a 599, rangos como 2XX o "default".', example: { valid: '"404":', invalid: '"99":' } },
+    { id: 'media-type', category: 'Contenido', severity: 'warning', title: 'Media types bien formados', description: 'Los tipos de contenido siguen el formato tipo/subtipo.', example: { valid: 'application/json:', invalid: 'json:' } },
+    { id: 'security-undefined', category: 'Seguridad', severity: 'error', title: 'Esquemas de seguridad definidos', description: 'Los requisitos de seguridad solo pueden usar esquemas declarados en components.securitySchemes.' }
+  ];
+  const RULE_BY_CODE = new Map();
+  BUILTIN_RULES.forEach((r) => (r.codes || [r.id]).forEach((c) => RULE_BY_CODE.set(c, r)));
+  const ruleOf = (code) => RULE_BY_CODE.get(code) || BUILTIN_RULES.find((r) => r.prefix && String(code).startsWith(r.prefix)) || null;
+  const SEVERITIES = ['error', 'warning', 'info', 'off'];
+
+  /** Traduce los ajustes antiguos (opIdUnique, opIdRequired, singleTag, tagsMustExist) al mapa de severidades por regla. */
+  function legacyRules(s) {
+    const out = {};
+    if (!s) return out;
+    if (s.opIdUnique && s.opIdUnique !== 'error') out['opid-duplicate'] = s.opIdUnique;
+    if (s.opIdRequired) out['opid-missing'] = 'error';
+    if (s.singleTag) out['tag-single'] = 'warning';
+    if (s.tagsMustExist === false) out['tag-undefined'] = 'off';
+    return out;
+  }
 
   let validatorFn = null;
   function getValidator() {
@@ -46,10 +86,27 @@
     }
   }
 
+  /** Motor Spectral: global en el navegador, módulo en Node (se carga solo si hay conjuntos de reglas). */
+  function spectralLib() {
+    if (typeof self !== 'undefined' && self.OAT && self.OAT.spectral) return self.OAT.spectral;
+    return require('./spectral.js');
+  }
+
+  function effectiveSeverity(rule, overrides) {
+    const o = overrides && overrides[rule.id];
+    return !rule.locked && SEVERITIES.includes(o) ? o : rule.severity;
+  }
+
   function validateProject(project, userConfig) {
     const cfg = Object.assign({}, DEFAULT_CONFIG, userConfig || {});
+    const overrides = Object.assign(legacyRules(userConfig), cfg.rules || {});
     const diags = [];
     const add = (d) => {
+      const rule = d.rule ? null : ruleOf(d.code);
+      if (rule) {
+        d.rule = rule.id;
+        if (!rule.locked) { const s = effectiveSeverity(rule, overrides); if (s === 'off') return; d.severity = s; }
+      }
       if (d.file && !d.line) { const l = project.locate(d.file, d.path || []); d.line = l.line; d.col = l.col; }
       d.id = diags.length + 1;
       diags.push(d);
@@ -181,10 +238,10 @@
         if (typeof op.operationId === 'string' && op.operationId) {
           if (!opIds.has(op.operationId)) opIds.set(op.operationId, []);
           opIds.get(op.operationId).push(base);
-        } else if (cfg.opIdRequired) addJs(bundle, base, { severity: 'error', code: 'opid-missing', category: 'Operaciones', message: 'La operación no tiene operationId', suggestion: 'Define un operationId único.' });
+        } else addJs(bundle, base, { severity: 'error', code: 'opid-missing', category: 'Operaciones', message: 'La operación no tiene operationId', suggestion: 'Define un operationId único.' });
         const tags = Array.isArray(op.tags) ? op.tags : [];
-        if (cfg.tagsMustExist) tags.forEach((t, i) => { if (!tagNames.has(t)) addJs(bundle, base.concat(['tags', i]), { severity: 'warning', code: 'tag-undefined', category: 'Tags', message: 'El tag "' + t + '" no esta declarado en tags', suggestion: 'Declara el tag a nivel de contrato o corrige el nombre.' }); });
-        if (cfg.singleTag && tags.length !== 1) addJs(bundle, base.concat(['tags']), { severity: 'warning', code: 'tag-single', category: 'Tags', message: 'Cada operación debe tener exactamente un tag (tiene ' + tags.length + ')', suggestion: 'Deja un único tag.' });
+        tags.forEach((t, i) => { if (!tagNames.has(t)) addJs(bundle, base.concat(['tags', i]), { severity: 'warning', code: 'tag-undefined', category: 'Tags', message: 'El tag "' + t + '" no esta declarado en tags', suggestion: 'Declara el tag a nivel de contrato o corrige el nombre.' }); });
+        if (tags.length !== 1) addJs(bundle, base.concat(['tags']), { severity: 'warning', code: 'tag-single', category: 'Tags', message: 'Cada operación debe tener exactamente un tag (tiene ' + tags.length + ')', suggestion: 'Deja un único tag.' });
         if (op.requestBody && (method === 'get' || method === 'head')) addJs(bundle, base.concat(['requestBody']), { severity: 'warning', code: 'body-in-get', category: 'Operaciones', message: 'Un requestBody en ' + method.toUpperCase() + ' no tiene semántica definida', suggestion: 'Usa parámetros de consulta o cambia el método.' });
         if (U.isObj(op.responses)) {
           for (const code of Object.keys(op.responses)) {
@@ -202,7 +259,24 @@
       }
     }
     for (const [, list] of routeMap) if (list.length > 1) list.forEach((r) => addJs(bundle, ['paths', r], { severity: 'error', code: 'path-duplicate', category: 'Rutas', message: 'Ruta duplicada o equivalente: ' + list.join(' y '), suggestion: 'Unifica las rutas; los nombres de parámetro no distinguen rutas.' }));
-    if (cfg.opIdUnique !== 'off') for (const [id, list] of opIds) if (list.length > 1) list.forEach((b) => addJs(bundle, b.concat(['operationId']), { severity: cfg.opIdUnique === 'warning' ? 'warning' : 'error', code: 'opid-duplicate', category: 'Operaciones', message: 'operationId duplicado "' + id + '" (' + list.map((x) => x[2].toUpperCase() + ' ' + x[1]).join(', ') + ')', suggestion: 'Usa un operationId distinto en cada operación.' }));
+    for (const [id, list] of opIds) if (list.length > 1) list.forEach((b) => addJs(bundle, b.concat(['operationId']), { severity: 'error', code: 'opid-duplicate', category: 'Operaciones', message: 'operationId duplicado "' + id + '" (' + list.map((x) => x[2].toUpperCase() + ' ' + x[1]).join(', ') + ')', suggestion: 'Usa un operationId distinto en cada operación.' }));
+
+    /* 5. Conjuntos de reglas propios (Spectral) */
+    const active = (cfg.rulesets || []).filter((rs) => rs && rs.enabled !== false && rs.ruleset && Array.isArray(rs.ruleset.rules) && rs.ruleset.rules.length);
+    if (active.length) {
+      const S = spectralLib();
+      const resolved = S.resolveDocument(js);
+      for (const rs of active) {
+        const over = rs.rules || {};
+        const rules = rs.ruleset.rules.map((r) => (SEVERITIES.includes(over[r.id]) ? Object.assign({}, r, { severity: over[r.id] }) : r));
+        const byId = new Map(rules.map((r) => [r.id, r]));
+        for (const res of S.runRuleset(Object.assign({}, rs.ruleset, { rules }), js, { resolved })) {
+          const r = byId.get(res.ruleId);
+          const desc = r && r.description && r.description !== res.message ? r.description : '';
+          addJs(bundle, res.path || [], { rule: rs.id + '#' + res.ruleId, ruleset: rs.id, severity: res.severity, code: res.ruleId, category: rs.name || 'Reglas propias', message: res.message, suggestion: desc });
+        }
+      }
+    }
 
     return finish(bundle);
 
@@ -216,5 +290,5 @@
     }
   }
 
-  return { validateProject, DEFAULT_CONFIG, resolveInternal };
+  return { validateProject, DEFAULT_CONFIG, BUILTIN_RULES, SEVERITIES, ruleOf, effectiveSeverity, legacyRules, resolveInternal };
 });

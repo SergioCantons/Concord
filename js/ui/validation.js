@@ -19,7 +19,9 @@
     live.addEventListener('change', () => { app.setSetting('liveValidation', live.checked); if (live.checked) app.validate(); });
     const toggle = iconBtn('chevron-down', 'Mostrar u ocultar el panel', () => app.togglePanel(), 'panel-toggle');
     const head = h('div', { class: 'panel-head' }, title, chips, spinner, h('span', { class: 'spacer' }), filter,
-      h('label', { class: 'check compact' }, live, h('span', null, 'Al editar')), btn('Validar', () => app.validate(true), 'small', 'refresh-cw'), toggle);
+      h('label', { class: 'check compact' }, live, h('span', null, 'Al editar')),
+      btn('Reglas', () => app.openRules(), 'small', 'list'),
+      btn('Validar', () => app.validate(true), 'small', 'refresh-cw'), toggle);
     const list = h('div', { class: 'diag-list', role: 'list' });
     el.append(head, list);
 
@@ -42,7 +44,7 @@
           h('span', { class: 'diag-ic' }, icon(d.severity === 'error' ? 'alert-circle' : d.severity === 'warning' ? 'alert-triangle' : 'info')),
           h('div', { class: 'diag-main' },
             h('div', { class: 'diag-msg' }, d.message),
-            h('div', { class: 'diag-loc' }, h('span', { class: 'badge kind' }, d.category), d.file ? h('code', null, d.file + (d.line ? ':' + d.line + ':' + d.col : '')) : null, d.path && d.path.length ? h('code', { class: 'muted' }, O.util.fmtPath(d.path)) : null),
+            h('div', { class: 'diag-loc' }, h('span', { class: 'badge kind' }, d.category), d.ruleset && d.code ? h('span', { class: 'badge ref', title: 'Regla de conjunto propio' }, d.code) : null, d.file ? h('code', null, d.file + (d.line ? ':' + d.line + ':' + d.col : '')) : null, d.path && d.path.length ? h('code', { class: 'muted' }, O.util.fmtPath(d.path)) : null),
             d.suggestion ? h('div', { class: 'diag-sug' }, d.suggestion) : null),
           h('div', { class: 'diag-actions' }, fix, iconBtn('file-code', 'Ver en el YAML', (e) => { e.stopPropagation(); app.gotoDiagnostic(d, 'yaml'); }), iconBtn('crosshair', 'Ir al elemento en el formulario', (e) => { e.stopPropagation(); app.gotoDiagnostic(d, 'form'); })));
         row.addEventListener('click', () => app.gotoDiagnostic(d, 'yaml'));

@@ -17,6 +17,39 @@ Guía breve:
 - Atajos: `Ctrl+S` guardar, `Ctrl+K` buscar, `Ctrl+Z` / `Ctrl+Y` deshacer/rehacer (fuera de campos de texto).
 - **Paneles ajustables**: arrastra los separadores para cambiar el ancho del explorador, el alto del panel de validación, el reparto de la vista dividida (formulario/YAML) y, en el comparador, el reparto entre cambios y diff, y entre la lista de cambios y su detalle. También con el teclado (foco en el separador + flechas; `Mayús` para pasos grandes). Doble clic o `Intro` vuelven al tamaño original. Los tamaños se guardan en `localStorage`.
 
+## Reglas de validación
+
+Concord valida el contrato en tres niveles: sintaxis, referencias y estructura OpenAPI 3.0 (siempre activas), reglas propias del catálogo (severidad configurable) y conjuntos de reglas propios del proyecto en formato Spectral. Se accede a todas desde el botón **Reglas** del panel de validación (también desde Ajustes → *Reglas de validación...*).
+
+### Reglas de serie
+
+Catálogo integrado con severidad *Error*, *Aviso*, *Info* o *Desactivada*. Las reglas de sintaxis, referencias y estructura son de tipo **siempre activa** (marca `Siempre activa`, selector deshabilitado); el resto se puede ajustar por contrato. Ejemplos: `path-format`, `path-param-missing`, `opid-duplicate`, `opid-missing`, `tag-undefined`, `tag-single`, `body-in-get`, `response-code`, `media-type`, `security-undefined`, `ref-siblings`. Cada regla muestra su descripción y un ejemplo válido/no válido. El botón *Restablecer valores por defecto* vuelve al catálogo original.
+
+### Conjuntos de reglas propios (Spectral)
+
+Cada conjunto es un fichero YAML/JSON en formato **Spectral** guardado dentro de `.concord/rulesets/` del contrato. Se pueden **importar** desde disco (botón *Importar fichero...*, arrastrar y soltar, o desde la **biblioteca del navegador**), **crear** en blanco (*Nuevo conjunto*), **editar** el YAML en un modal con validación en vivo, **exportar**, guardar en la biblioteca reutilizable, **eliminar** o desactivar sin borrarlos (interruptor *Activo*). Cada regla del conjunto admite su propia severidad efectiva por contrato.
+
+Compatibilidad con Spectral:
+
+- **Soportado**: `given` como JSONPath (una cadena o lista), `then.field` (con `@key`), y las funciones `truthy`, `falsy`, `defined`, `undefined`, `pattern` (`match`/`notMatch`), `casing` (`flat`/`camel`/`pascal`/`kebab`/`cobol`/`snake`/`macro`), `length` (`min`/`max`), `enumeration`, `alphabetical`, `schema`, `xor`, `or`, `typedEnum`, `aliases` para expandir `given`, `severity`, `description`, `message` con marcadores `{{property}}`, `{{value}}`, `{{path}}` y `{{error}}`.
+- **No soportado**: `extends spectral:oas` u otros rulesets remotos, funciones JavaScript personalizadas (`functions`, `functionsDir`), funciones específicas de OAS (`oas*`, `unreferencedReusableObject`) y `overrides`. Los elementos no soportados se ignoran al validar y se listan al importar.
+
+### Asistente de nueva regla
+
+Añade reglas a un conjunto sin escribir YAML: identificador (kebab-case, único), descripción, mensaje con marcadores, severidad y un desplegable *Se aplica a* con presets que traducen a JSONPath (Operaciones, Parámetros, Propiedades, Esquemas de texto/numéricos/lista, Respuestas, Cuerpos, Info, o *Personalizado*). La *Comprobación* mapea a las funciones Spectral (existe, no existe, tiene valor, patrón, es uno de, longitud, convención de nombres, esquema JSON). El YAML resultante se anexa al fichero conservando comentarios (edición sobre AST), y se rechaza si el resultado no es un ruleset válido.
+
+### Importación de perfiles AMF de MuleSoft
+
+Los ficheros de **Perfil de Validación AMF 1.0** de MuleSoft (`#%Validation Profile 1.0`) se detectan al importar y se traducen automáticamente a un conjunto Spectral, que es lo que se guarda y se ejecuta. La traducción conserva severidades (`violation` → error, `warning` → aviso, `info`; las reglas no listadas quedan desactivadas), mensajes y las restricciones habituales sobre OpenAPI 3.0 (tipos y formatos, límites, longitudes, patrones, listas, propiedades, parámetros, media types). Antes de guardar se muestra un informe: las reglas **traducidas** son equivalentes, las **parciales** son aproximaciones (se explica el motivo y quedan comentadas en el YAML) y las **no soportadas** (`rego`, funciones JavaScript, propiedades del modelo AMF sin equivalente en OpenAPI) no se importan.
+
+### Biblioteca del navegador
+
+Los conjuntos que se marcan como *Guardar en biblioteca* quedan disponibles en este navegador para reutilizarse en otros contratos (menú *Desde la biblioteca*). *Gestionar biblioteca...* permite eliminar entradas guardadas.
+
+### Almacenamiento y guardado
+
+La configuración de severidades y los conjuntos activos se guardan en `.concord/validation.yaml`; los conjuntos importados o creados se escriben en `.concord/rulesets/*.yaml`. Todo forma parte del contrato: viaja al reorganizarlo (documento único / fragments) y se aplica al pulsar *Guardar*. Los conjuntos eliminados desde la aplicación se borran también de la carpeta al guardar; los ficheros de contrato nunca se eliminan.
+
 ## Desarrollo
 
 Requiere Node.js (probado con v24) solo para desarrollar; la aplicación en sí no lo necesita.
@@ -52,6 +85,7 @@ Tamaño del código empaquetado: `vendor/oat-vendor.js` ≈ 327 KB (minificado) 
   - Preferencias de validación y tamaños de los paneles en `localStorage`.
   - Contratos recientes (carpetas y ficheros sueltos, hasta 8) en IndexedDB: solo los identificadores que da el navegador, no su contenido. Se pueden vaciar desde el propio menú de recientes.
   - Recuperación de sesión: **desactivada por defecto**; si se activa en ajustes, copia el contenido de los ficheros en `localStorage` mientras hay cambios sin guardar.
+  - Biblioteca de conjuntos de reglas: opcional; solo lo que guardes explícitamente con *Guardar en biblioteca* se copia a `localStorage` para reutilizarlo en este navegador. Se puede vaciar desde *Gestionar biblioteca...*.
 - Las rutas de `$ref` se resuelven dentro de la carpeta del proyecto; las que salen de ella o son absolutas se marcan como error. La escritura rechaza rutas con `..`, absolutas, con unidad (`C:`) o dentro de `.oat-backup/`.
 
 ## Navegadores, permisos y límites del sistema de ficheros
