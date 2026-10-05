@@ -5,7 +5,14 @@
   "scripts": {
     "build": "node scripts/build-vendor.js && node scripts/build-examples.js",
     "build:examples": "node scripts/build-examples.js",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "build:core-bridge": "node scripts/build-core-bridge.js",
+    "dev": "npm run build:core-bridge && vite",
+    "build:react": "npm run build:core-bridge && npm run typecheck && vite build",
+    "preview:react": "vite preview",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.core.json && tsc -p tsconfig.node.json",
+    "test:react": "npm run build:core-bridge && vitest run",
+    "lint": "eslint src"
   },
   "license": "ISC",
   "type": "commonjs",
@@ -16,11 +23,28 @@
     "ajv-formats": "^3.0.1",
     "fflate": "^0.8.3",
     "jsonpath-plus": "^11.1.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/node": "^22.20.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
     "esbuild-wasm": "0.28.2",
-    "lucide-static": "^1.49.0"
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "jsdom": "^28.1.0",
+    "lucide-static": "^1.49.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vite": "^7.3.6",
+    "vitest": "^5.0.3"
   },
   "private": true
 }
