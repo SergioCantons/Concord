@@ -16,6 +16,7 @@
     const ta = h('textarea', { class: 'code', spellcheck: 'false', wrap: 'off', 'aria-label': 'Editor YAML', autocomplete: 'off', autocapitalize: 'off' });
     const errBox = h('div', { class: 'yaml-errors', role: 'alert' });
     el.append(bar, h('div', { class: 'code-wrap' }, gutter, ta), errBox);
+    O.yamlHighlight.attach(ta);
     let file = null;
     let applying = false;
     let timer = null;
@@ -60,6 +61,7 @@
       if (!f) { ta.value = ''; updateGutter(); return; }
       app.yamlFile = name;
       ta.value = display(f.draft ? f.draft.text : f.text);
+      O.yamlHighlight.refresh(ta);
       fillFiles();
       updateGutter(); renderStatus();
     }
@@ -136,6 +138,7 @@
         if (document.activeElement === ta && !f.draft && timer) return;
         const st = ta.scrollTop; const s = ta.selectionStart;
         ta.value = wanted;
+        O.yamlHighlight.refresh(ta);
         ta.scrollTop = st; try { ta.setSelectionRange(Math.min(s, wanted.length), Math.min(s, wanted.length)); } catch (e) { /* ignore */ }
       }
       fillFiles(); updateGutter(); renderStatus();

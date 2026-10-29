@@ -219,8 +219,13 @@
       if (c.reason) box.appendChild(h('p', null, c.reason));
       if (c.breaking) box.appendChild(h('p', { class: 'muted' }, 'Clasificación orientativa según el contexto de uso; no es una garantía de compatibilidad.'));
       box.appendChild(h('div', { class: 'row wrap' }, h('code', { class: 'path-code' }, c.pathText), btn('Copiar ruta', () => copy(c.pathText), 'small', 'copy'), btn('Copiar id', () => copy(c.id), 'small', 'copy')));
-      box.appendChild(h('div', { class: 'old-new' }, h('div', null, h('h4', null, 'Antes (base)'), h('pre', { class: 'code-block' }, yamlOf(c.old))), h('div', null, h('h4', null, 'Ahora (comparado)'), h('pre', { class: 'code-block' }, yamlOf(c.new)))));
+      box.appendChild(h('div', { class: 'old-new' }, h('div', null, h('h4', null, 'Antes (base)'), highlightedBlock(yamlOf(c.old))), h('div', null, h('h4', null, 'Ahora (comparado)'), highlightedBlock(yamlOf(c.new)))));
       return box;
+    }
+    function highlightedBlock(text) {
+      const pre = h('pre', { class: 'code-block' }, text);
+      O.yamlHighlight.render(pre);
+      return pre;
     }
     function copy(text) {
       const done = () => app.toast('Copiado: ' + text, 'ok', 1800);
@@ -253,7 +258,12 @@
         if (!d.lines.some((l) => l.t !== '=')) out.appendChild(h('p', { class: 'muted pad' }, 'Los ficheros son idénticos en texto.'));
         let ln = 0;
         const frag = document.createDocumentFragment();
-        d.lines.forEach((l) => { if (l.t !== '+') ln++; frag.appendChild(h('div', { class: 'dl ' + l.t }, h('span', { class: 'n' }, l.t === '+' ? '' : String(ln)), h('span', { class: 'sg' }, l.t === '=' ? ' ' : l.t), h('span', { class: 't' }, l.text))); });
+        d.lines.forEach((l) => {
+          if (l.t !== '+') ln++;
+          const text = h('span', { class: 't' });
+          text.innerHTML = O.yamlHighlight.highlight(l.text);
+          frag.appendChild(h('div', { class: 'dl ' + l.t }, h('span', { class: 'n' }, l.t === '+' ? '' : String(ln)), h('span', { class: 'sg' }, l.t === '=' ? ' ' : l.t), text));
+        });
         out.appendChild(frag);
       };
       selA.addEventListener('change', draw); selB.addEventListener('change', draw);

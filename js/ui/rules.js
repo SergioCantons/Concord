@@ -134,8 +134,8 @@
         const details = r.example ? h('details', { class: 'rules-example', 'data-fold-id': 'builtin:' + r.id },
           h('summary', null, 'Ver ejemplo'),
           h('div', { class: 'rules-example-body' },
-            r.example.valid ? h('div', null, h('span', { class: 'muted' }, 'Válido:'), h('pre', { class: 'code-block' }, r.example.valid)) : null,
-            r.example.invalid ? h('div', null, h('span', { class: 'muted' }, 'No válido:'), h('pre', { class: 'code-block' }, r.example.invalid)) : null)) : null;
+            r.example.valid ? h('div', null, h('span', { class: 'muted' }, 'Válido:'), highlightedBlock(r.example.valid)) : null,
+            r.example.invalid ? h('div', null, h('span', { class: 'muted' }, 'No válido:'), highlightedBlock(r.example.invalid)) : null)) : null;
         wrap.appendChild(h('div', { class: 'rule-row' + (r.locked ? ' locked' : '') },
           h('div', { class: 'rule-main' },
             h('div', { class: 'rule-head' },
@@ -400,6 +400,7 @@
   function openYamlEditor(app, rs, rerender) {
     const ta = h('textarea', { class: 'code rules-yaml-ta', spellcheck: 'false', 'aria-label': 'YAML del conjunto ' + rs.name, rows: 20 });
     ta.value = rs.text;
+    const highlighted = O.yamlHighlight.attach(ta);
     const status = h('div', { class: 'rules-yaml-status' });
     const okRef = {};
     let parsed = null;
@@ -421,7 +422,7 @@
     ta.addEventListener('input', () => debounce());
     const content = h('div', { class: 'stack rules-yaml-dialog' },
       h('p', { class: 'muted' }, 'Fichero: ' + rs.id),
-      ta, status);
+      highlighted, status);
     const m = modal({ title: 'Editar YAML — ' + rs.name, wide: true, content, cancelValue: null, actions: [
       { label: 'Cancelar', value: null },
       { label: 'Guardar', kind: 'primary', value: '__ok__', ref: (b) => { okRef.b = b; }, onClick: () => {
@@ -544,11 +545,13 @@
         const obj = buildRuleObj();
         const id = (st.id || 'mi-regla').trim();
         preview.textContent = YAML().stringify({ [id]: obj }, { lineWidth: 0 });
+        O.yamlHighlight.render(preview);
         const idErr = validateId();
         if (okRef.b) okRef.b.disabled = !!idErr;
         if (idErr && st.id) errBox.textContent = idErr;
       } catch (e) {
         preview.textContent = '';
+        O.yamlHighlight.render(preview);
         errBox.textContent = e.message;
         if (okRef.b) okRef.b.disabled = true;
       }
@@ -592,6 +595,12 @@
     ] });
     update();
     return m.promise;
+  }
+
+  function highlightedBlock(text) {
+    const pre = h('pre', { class: 'code-block' }, text);
+    O.yamlHighlight.render(pre);
+    return pre;
   }
 
   O.rulesUI = { open };

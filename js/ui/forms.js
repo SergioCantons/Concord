@@ -66,8 +66,10 @@
     o = o || {};
     const cur = val(app, path);
     const el = h('textarea', { rows: o.rows || 2, spellcheck: false, class: 'mono' });
+    const highlighted = O.yamlHighlight.attach(el);
     const err = h('span', { class: 'field-error' });
     el.value = cur === undefined ? '' : (typeof cur === 'string' ? (/^[\w .-]*$/.test(cur) && cur !== '' && !/^(true|false|null|~|\d[\d.eE+-]*)$/i.test(cur) ? cur : JSON.stringify(cur)) : YAML().stringify(cur, { lineWidth: 0 }).trimEnd());
+    O.yamlHighlight.refresh(el);
     el.addEventListener('change', () => {
       const t = el.value.trim();
       let parsed;
@@ -75,7 +77,7 @@
       err.textContent = ''; el.classList.remove('invalid');
       app.edit(label, (tx) => tx.set(path, t === '' ? undefined : parsed), { coalesce: true, after: o.after });
     });
-    return h('label', { class: 'field' + (o.cls ? ' ' + o.cls : '') }, h('span', { class: 'field-label' }, label), el, err, o.hint ? h('span', { class: 'field-hint' }, o.hint) : null);
+    return h('label', { class: 'field' + (o.cls ? ' ' + o.cls : '') }, h('span', { class: 'field-label' }, label), highlighted, err, o.hint ? h('span', { class: 'field-hint' }, o.hint) : null);
   };
   /** Lista de valores simples (tags, enum...) como etiquetas editables. */
   F.chips = function (app, label, path, o) {
@@ -134,7 +136,9 @@
     o = o || {};
     const cur = app.project.read(path, false);
     const ta = h('textarea', { rows: o.rows || 12, spellcheck: false, class: 'mono', 'aria-label': 'YAML del nodo' });
+    const highlighted = O.yamlHighlight.attach(ta);
     ta.value = cur === undefined ? '' : YAML().stringify(cur, { lineWidth: 0 }).trimEnd();
+    O.yamlHighlight.refresh(ta);
     const err = h('div', { class: 'field-error', role: 'alert' });
     const apply = () => {
       try {
@@ -142,7 +146,7 @@
         if (ok) { err.textContent = ''; app.toast('Nodo actualizado', 'ok'); if (o.after) o.after(); }
       } catch (e) { err.textContent = e.message; }
     };
-    return h('div', { class: 'stack' }, ta, err, h('div', { class: 'row' }, btn('Aplicar YAML', apply, 'primary', 'check'), h('span', { class: 'muted' }, 'Sustituye este nodo; los cambios se pueden deshacer.')));
+    return h('div', { class: 'stack' }, highlighted, err, h('div', { class: 'row' }, btn('Aplicar YAML', apply, 'primary', 'check'), h('span', { class: 'muted' }, 'Sustituye este nodo; los cambios se pueden deshacer.')));
   };
 
   /** Selector de componentes por nombre. */
