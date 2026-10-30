@@ -65,6 +65,21 @@ Los ficheros generados (`vendor/*`, `js/ui/examples-data.js`) están versionados
 
 Estructura: `js/core/` (modelo, proyecto/AST, `$ref`, validación, operaciones, comparación, exportación, escritura segura; también se ejecuta bajo Node en las pruebas), `js/ui/` (interfaz), `css/`, `vendor-src/` y `scripts/` (empaquetado), `examples/` y `tests/`.
 
+### Migración a React (en curso)
+
+La migración a React con TypeScript estricto (issue #17) se desarrolla en paralelo en `react.html`; `index.html` sigue siendo la aplicación completa y no cambia. Por ahora la vista previa solo edita el título de un contrato nuevo, con deshacer y rehacer; no abre ni guarda ficheros. Necesita Node.js 20.19+ o 22.12+ y servirse por HTTP(S): no funciona abriendo el fichero con doble clic.
+
+```
+npm run dev            # servidor de desarrollo: /react.html (vista previa) y / (aplicación actual)
+npm run build:react    # comprueba tipos y genera la vista previa en dist-react/
+npm run preview:react  # sirve dist-react/ en /react.html
+npm run test:react     # pruebas de aplicación y componentes (Vitest + Testing Library)
+npm run typecheck      # TypeScript estricto; dominio y aplicación se comprueban sin tipos del navegador
+npm run lint           # ESLint, incluidas las fronteras entre capas
+```
+
+Capas en `src/`: `domain/` (frontera con el núcleo `js/core`, que se usa sin cambios a través de un puente generado con `esbuild-wasm` por `npm run build:core-bridge`; ya lo ejecutan `dev`, `build:react` y `test:react`), `application/` (estado observable y comandos sobre el contrato), `presentation/` (componentes React) y `composition.ts` + `main.tsx` (montaje). Las dependencias van de presentación a aplicación y de aplicación a dominio; ESLint rechaza las importaciones en sentido contrario.
+
 ### Dependencias y justificación
 
 | Paquete | Versión (lock) | Uso | Motivo |
@@ -75,8 +90,13 @@ Estructura: `js/core/` (modelo, proyecto/AST, `$ref`, validación, operaciones, 
 | `fflate` | 0.8.3 | ZIP | Alternativa de guardado cuando no hay acceso a carpeta. |
 | `esbuild-wasm` (dev) | 0.28.2 | Empaquetar lo anterior en un único script | Versión WASM: no depende de descargar un binario nativo. |
 | `lucide-static` (dev) | 1.49.0 | Iconos SVG (52) | Incluidos localmente en `vendor/icons.js`. |
+| `react` + `react-dom` | 19.3.0 | Interfaz de la migración (`react.html`) | Stack elegido en la issue #17. |
+| `vite` + `@vitejs/plugin-react` (dev) | 7.3.6 + 5.2.0 | Servidor de desarrollo y build de `react.html` | Herramienta estándar para React; la aplicación actual no la usa. |
+| `typescript` + `@types/react`, `@types/react-dom`, `@types/node` (dev) | 6.0.3 | Tipado estricto del código nuevo | El núcleo sigue en JavaScript, con un contrato tipado. |
+| `eslint` + `@eslint/js` + `typescript-eslint` + `eslint-plugin-react-hooks` (dev) | 9.39.5 + 8.71.0 + 7.1.1 | Lint y fronteras entre capas | Hace cumplir la dirección de las dependencias. |
+| `vitest` + `@testing-library/react`, `/dom`, `/user-event` + `jsdom` (dev) | 5.0.3 + 16.3.3 + 28.1.0 | Pruebas de aplicación y componentes | Las pruebas del núcleo siguen en `node:test`. |
 
-Tamaño del código empaquetado: `vendor/oat-vendor.js` ≈ 327 KB (minificado) y `vendor/icons.js` ≈ 19 KB. No se usa framework de UI: la interfaz es DOM nativo para mantener la carga instantánea y evitar una cadena de construcción en tiempo de uso.
+Tamaño del código empaquetado: `vendor/oat-vendor.js` ≈ 327 KB (minificado) y `vendor/icons.js` ≈ 19 KB. La aplicación actual (`index.html`) no usa framework de UI: es DOM nativo para mantener la carga instantánea y evitar una cadena de construcción en tiempo de uso. La vista previa React se empaqueta aparte en `dist-react/`.
 
 ## Privacidad y funcionamiento local
 
