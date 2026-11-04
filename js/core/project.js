@@ -103,7 +103,27 @@
       return false;
     }
     hasDraft() { for (const f of this.files.values()) if (f.draft) return true; return false; }
-    markSaved() { this.original = this._texts(); this.extrasOriginal = new Map(this.extras); this._bump(); }
+    /** Marca como guardado el estado actual o, con `written` (ruta -> texto), exactamente lo que se escribió. */
+    markSaved(written) {
+      if (written) {
+        const orig = new Map(this.original); const ex = new Map(this.extrasOriginal);
+        written.forEach((t, p) => (isExtraPath(p) ? ex : orig).set(p, t));
+        this.original = orig; this.extrasOriginal = ex;
+      } else { this.original = this._texts(); this.extrasOriginal = new Map(this.extras); }
+      this._bump();
+    }
+    /** Cambia la ruta de un fichero (también en el historial). No reescribe $ref: solo para ficheros no referenciados. */
+    renamePath(from, to) {
+      if (from === to || !this.files.has(from)) return;
+      if (this.files.has(to)) throw new Error('Ya existe ' + to);
+      const mv = (m) => { if (m && m.has(from)) { const out = new Map(); m.forEach((v, k) => out.set(k === from ? to : k, v)); return out; } return m; };
+      this.files = mv(this.files); this.files.get(to).path = to;
+      this.lowerIndex.delete(from.toLowerCase()); this.lowerIndex.set(to.toLowerCase(), to);
+      this.original = mv(this.original);
+      this.past.concat(this.future).forEach((s) => { s.texts = mv(s.texts); if (s.root === from) s.root = to; });
+      if (this.rootFile === from) this.rootFile = to;
+      this._bump();
+    }
     /** Crea, modifica o (con null) elimina un fichero de configuración .concord/. */
     setExtra(path, text) {
       if (!isExtraPath(path)) throw new Error('Los ficheros de configuración deben estar en ' + CONFIG_DIR);
