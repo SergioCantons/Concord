@@ -14,6 +14,7 @@ Guía breve:
 - **YAML avanzado**: pestaña de YAML por fichero; un YAML inválido se guarda como borrador y no se pierde.
 - **Guardar** (`Ctrl+S`): elegir documento único o fragments, estrategia (tags, paths, componentes, schemas o reglas propias), número objetivo, nombres y carpeta; se muestra la previsualización (creados/modificados/sin uso) y una verificación del resultado antes de escribir.
 - **Comparar**: cargar base y comparado (botones o arrastrando ficheros YAML/JSON o su carpeta sobre cada tarjeta; pueden tener distinta distribución de ficheros), filtrar, buscar y exportar a Markdown, HTML o JSON. Las vistas *Formulario* (cambios semánticos), *YAML* (diff textual por fichero) y *Dividida* (ambas, solo en pantallas anchas) conservan los contratos elegidos y el resultado.
+- **Fusionar contratos** (desde la comparación): marca cambios (o abre su detalle) y pulsa **← Incorporar al base** para que el base adopte la versión del comparado, o **Revertir en el comparado →** para deshacer el cambio en el comparado. Se copia el elemento más concreto posible (propiedad, parámetro, respuesta, operación o componente), los `$ref` se adaptan al fichero de destino y se copian también los componentes y tags que falten. Cada fusión es un paso de deshacer; el aviso superior permite deshacerla, abrir el contrato en el editor para guardarlo o descargarlo.
 - Atajos: `Ctrl+S` guardar, `Ctrl+K` buscar, `Ctrl+Z` / `Ctrl+Y` deshacer/rehacer (fuera de campos de texto).
 - **Paneles ajustables**: arrastra los separadores para cambiar el ancho del explorador, el alto del panel de validación, el reparto de la vista dividida (formulario/YAML) y, en el comparador, el reparto entre cambios y diff, y entre la lista de cambios y su detalle. También con el teclado (foco en el separador + flechas; `Mayús` para pasos grandes). Doble clic o `Intro` vuelven al tamaño original. Los tamaños se guardan en `localStorage`.
 
@@ -120,6 +121,7 @@ Tamaño del código empaquetado: `vendor/oat-vendor.js` ≈ 327 KB (minificado) 
 - Es semántica sobre el modelo con referencias resueltas; ignora orden de claves, formato y comentarios. La clasificación de cambios incompatibles es orientativa, no una garantía.
 - Los cambios de nombre/movimiento solo se infieren cuando el contenido es idéntico.
 - Se ejecuta en el hilo principal (sin Web Worker): con contratos muy grandes la interfaz puede notarse bloqueada durante el cálculo.
+- Fusión: los cambios en listas tipo conjunto (`required`, `enum`, `tags`) trasladan la lista completa, y un parámetro definido a nivel de ruta afecta a todas sus operaciones. Un cambio dentro de una operación o componente que solo existe en un lado (p. ej. tras un movimiento) solo se traslada junto con la operación o el componente. Los nodos nuevos se escriben en estilo YAML de bloque.
 
 **Interfaz y funcionalidad no cubierta o parcial**
 - Sin autocompletado contextual en el editor YAML (es un `textarea`; se evita cualquier dependencia pesada).
@@ -140,6 +142,7 @@ No se debe considerar cumplida la totalidad de los criterios de aceptación del 
 | Casos 9–11 (`tests/compare.test.js`) | Igualdad con distinto orden/formato (incl. ciclos), endpoint eliminado + parámetro obligatorio + cambio de tipo (incompatibles), distinta distribución de ficheros, referencias sin resolver, exportación Markdown/HTML/JSON y diff textual. |
 | Casos 8, 11b, 12 (`tests/export.test.js`) | Exportar documento único y fragments con las cuatro estrategias y número objetivo, recarga + validación + comparación sin cambios; confirmación de sobrescritura, copia de seguridad, rollback ante fallo y rechazo de rutas fuera de la carpeta. |
 | `tests/project.test.js` | Edición sobre el AST conservando comentarios y `x-*`, con fragment compartido. |
+| `tests/merge.test.js` | Fusión: trasladar todos los cambios en ambos sentidos deja los contratos iguales (fragmentado/único), dependencias y tags, `discriminator.mapping`, parámetros por nivel, `required`, listas, renombrados/movimientos, deshacer y rollback. |
 
 No hay pruebas de la interfaz, de la API File System Access real (se usa una E/S en memoria), de rendimiento ni de OpenAPI 3.1.
 

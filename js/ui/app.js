@@ -416,7 +416,7 @@
     else if ((e.ctrlKey || e.metaKey) && !inText && e.key.toLowerCase() === 'z' && !e.shiftKey && app.mode === 'edit') { e.preventDefault(); doUndo(); }
     else if ((e.ctrlKey || e.metaKey) && !inText && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) && app.mode === 'edit') { e.preventDefault(); doRedo(); }
   });
-  window.addEventListener('beforeunload', (e) => { if (app.project && (app.project.isDirty())) { e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('beforeunload', (e) => { const cmpDirty = app.cmp && ['base', 'next'].some((w) => app.cmp[w] && app.cmp[w].project !== app.project && app.cmp[w].project.isDirty()); if ((app.project && app.project.isDirty()) || cmpDirty) { e.preventDefault(); e.returnValue = ''; } });
   window.addEventListener('resize', () => {
     if (app.mode === 'compare') app.compareView.onResize();
     else if (app.mode === 'edit' && isNarrow() && app.view === 'split') { app.view = 'form'; renderMain(); }

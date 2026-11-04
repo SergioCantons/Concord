@@ -282,3 +282,15 @@ textarea.code:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
   .dialog-body { padding: 12px; }
   .overlay { padding-top: 2vh; }
 }
+/* Fusión de contratos desde la comparación */
+.merge-banner { display: flex; flex-direction: column; gap: 6px; }
+.merge-banner-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--warn); border-radius: var(--radius); background: var(--warn-soft); }
+.merge-banner-row .grow { flex: 1; min-width: 200px; }
+.merge-bar { align-items: center; gap: 10px; padding: 6px 10px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--surface-2); }
+.tree-item.change .merge-check { flex: none; margin: 0; width: 15px; height: 15px; cursor: pointer; }
+.merge-detail { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.merge-detail h4 { margin: 0; }
+.merge-detail p { margin: 0; }
+.merge-option { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.merge-option .btn { flex: none; }
+.merge-what { flex: 1; min-width: 180px; font-size: 12.5px; }
