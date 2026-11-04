@@ -177,3 +177,18 @@ body.panel-collapsed .validation-slot > .splitter { display: none; }
   .validation.collapsed .chips-bar, .validation.collapsed .mini-search, .validation.collapsed .panel-head > .spacer,
   .validation.collapsed .panel-head > .check, .validation.collapsed .panel-head > .btn { display: none; }
 }
+/* Reordenar arrastrando en el explorador */
+.sortable { position: relative; }
+.sortable.dragging { opacity: 0.45; }
+.sortable.drop-before::before, .sortable.drop-after::after { content: ''; position: absolute; left: 4px; right: 4px; height: 2px; background: var(--accent); border-radius: 2px; pointer-events: none; }
+.sortable.drop-before::before { top: -1px; }
+.sortable.drop-after::after { bottom: -1px; }
+/* Operaciones que comparten ruta: se mueven juntas entre rutas */
+.ti-link { display: inline-flex; align-items: center; gap: 2px; flex: none; font-size: 10.5px; font-weight: 600; color: var(--muted); }
+.ti-link .icon { width: 12px; height: 12px; }
+.tree-item.route-peer { box-shadow: inset 2px 0 0 var(--accent); background: rgba(15, 118, 110, 0.06); }
+.tree-item.route-peer .ti-link, .tree-item:hover .ti-link { color: var(--accent); }
+.sortable.drag-linked { opacity: 0.55; outline: 1px dashed var(--accent); outline-offset: -1px; }
+.sortable.drag-linked::after { content: 'se mueve junto'; position: absolute; right: 6px; top: 50%; transform: translateY(-50%); padding: 0 5px; border-radius: 3px; font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0; color: #fff; background: var(--accent); pointer-events: none; }
+@keyframes moved-flash { from { background: var(--accent-soft); } to { background: transparent; } }
+.tree-item.moved-flash { animation: moved-flash 0.9s ease-out; }

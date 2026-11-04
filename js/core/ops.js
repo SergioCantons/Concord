@@ -210,10 +210,29 @@
     }, { coalesce: false });
   }
 
+  /* ---------- Reordenacion (arrastrar en el explorador) ---------- */
+  function movePath(project, route, targetRoute, after) {
+    return project.mutate('Reordenar ruta ' + route, (tx) => { tx.moveTo(['paths'], route, targetRoute, after); });
+  }
+  function moveMethod(project, route, method, targetMethod, after) {
+    return project.mutate('Reordenar operación ' + method.toUpperCase() + ' ' + route, (tx) => { tx.moveTo(['paths', route], method, targetMethod, after); });
+  }
+  function moveComponent(project, type, name, targetName, after) {
+    return project.mutate('Reordenar ' + name, (tx) => { tx.moveTo(['components', type], name, targetName, after); });
+  }
+  function moveTag(project, name, targetName, after) {
+    const tags = project.read(['tags'], true);
+    need(Array.isArray(tags), 'El contrato no declara tags');
+    const idx = (n) => tags.findIndex((t) => t && t.name === n);
+    const i = idx(name); const t = idx(targetName);
+    need(i >= 0 && t >= 0, 'Tag no declarado');
+    return project.mutate('Reordenar tag ' + name, (tx) => { tx.moveTo(['tags'], i, t, after); });
+  }
+
   return {
     METHODS, pathParamsFromRoute, operationIds, uniqueOperationId, defaultOperationId, addPath, addOperation, duplicateOperation, renameRoute, changeMethod,
     deleteOperation, deletePath, setOperationTags, renameTag, componentRef, describeUsage, componentConsumers, addComponent, addSchema,
     duplicateComponent: duplicateComponentAs, renameComponent, deleteComponent, extractInline, setRef, addProperty, renameProperty, deleteProperty,
-    moveProperty, setRequired, newOperationBody
+    moveProperty, setRequired, newOperationBody, movePath, moveMethod, moveComponent, moveTag
   };
 });

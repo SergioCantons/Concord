@@ -31,7 +31,7 @@
       b.addEventListener('click', () => { app.select(sel); app.closeSidebarOnMobile(); });
       b.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); app.select(sel); app.closeSidebarOnMobile(); }
-        else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const all = Array.from(list.querySelectorAll('.tree-item, .group-head')); const i = all.indexOf(b); const n = all[i + (e.key === 'ArrowDown' ? 1 : -1)]; if (n) n.focus(); }
+        else if (!e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); const all = Array.from(list.querySelectorAll('.tree-item, .group-head')); const i = all.indexOf(b); const n = all[i + (e.key === 'ArrowDown' ? 1 : -1)]; if (n) n.focus(); }
       });
       if (opts.menu) b.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu({ x: e.clientX, y: e.clientY }, opts.menu()); });
       return b;
@@ -41,12 +41,77 @@
       const hd = h('div', { class: 'group-head', role: 'treeitem', tabindex: 0, 'aria-expanded': open ? 'true' : 'false' }, h('span', { class: 'chev' + (open ? ' open' : '') }, icon('chevron-right')), h('span', { class: 'group-name' }, label), h('span', { class: 'count' }, String(count)));
       const toggle = () => { if (open) state.collapsed.add(key); else state.collapsed.delete(key); render(); };
       hd.addEventListener('click', toggle);
-      hd.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const all = Array.from(list.querySelectorAll('.tree-item, .group-head')); const n = all[all.indexOf(hd) + (e.key === 'ArrowDown' ? 1 : -1)]; if (n) n.focus(); } });
+      hd.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } else if (!e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); const all = Array.from(list.querySelectorAll('.tree-item, .group-head')); const n = all[all.indexOf(hd) + (e.key === 'ArrowDown' ? 1 : -1)]; if (n) n.focus(); } });
       return { head: hd, open };
     }
     function more(key, total, shown) {
       if (total <= shown) return null;
       return h('button', { type: 'button', class: 'more-btn', onclick: () => { state.limit[key] = (state.limit[key] || CHUNK) + CHUNK; render(); } }, 'Mostrar más (' + (total - shown) + ')');
+    }
+
+    /* ----- reordenar arrastrando (y con Alt+flechas) ----- */
+    let drag = null;
+    const clearDrop = () => list.querySelectorAll('.drop-before, .drop-after').forEach((n) => n.classList.remove('drop-before', 'drop-after'));
+    const neighbours = (el) => Array.from(list.querySelectorAll('[data-dnd]')).filter((n) => n.dataset.dnd === el.dataset.dnd);
+    /** Elementos de la misma ruta (operaciones que comparten path y se mueven juntas). */
+    const byRoute = (route) => Array.from(list.querySelectorAll('[data-route]')).filter((n) => n.dataset.route === route);
+    function setLinked(els, except) {
+      els = els.filter((n) => n !== except);
+      list.querySelectorAll('.drag-linked').forEach((n) => { if (!els.includes(n)) n.classList.remove('drag-linked'); });
+      els.forEach((n) => n.classList.add('drag-linked'));
+    }
+    function runMove(fn, focusKey, flashRoute) {
+      app.op(fn);
+      if (focusKey || flashRoute) requestAnimationFrame(() => {
+        const n = focusKey && Array.from(list.querySelectorAll('[data-dnd-key]')).find((x) => x.dataset.dndKey === focusKey); if (n) n.focus();
+        if (flashRoute) byRoute(flashRoute).forEach((x) => { x.classList.add('moved-flash'); setTimeout(() => x.classList.remove('moved-flash'), 900); });
+      });
+    }
+    /** Hace arrastrable el elemento; scope agrupa los elementos que se pueden reordenar entre si. */
+    /** linked(targetKey) devuelve los elementos que se moveran junto al arrastrado (targetKey null: al empezar). */
+    function sortable(el, scope, key, onMove, linked) {
+      el.draggable = true;
+      el.dataset.dnd = scope;
+      el.dataset.dndKey = scope + '\u0000' + key;
+      el.classList.add('sortable');
+      el._dnd = { scope, key, onMove, linked, el };
+      el.setAttribute('aria-description', 'Arrastra o pulsa Alt+flecha para reordenar' + (el.dataset.hint ? '. ' + el.dataset.hint : ''));
+      el.addEventListener('dragstart', (e) => {
+        e.stopPropagation();
+        drag = el._dnd;
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('application/x-concord-sort', String(key)); } catch (err) { /* algunos navegadores */ }
+        requestAnimationFrame(() => { el.classList.add('dragging'); setLinked(linked ? linked(null) : [], el); });
+      });
+      el.addEventListener('dragend', () => { drag = null; el.classList.remove('dragging'); clearDrop(); setLinked([]); });
+      el.addEventListener('dragover', (e) => {
+        if (!drag || drag.scope !== scope || drag.key === key) return;
+        e.preventDefault(); e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+        setLinked(drag.linked ? drag.linked(key) : [], drag.el);
+        const r = el.getBoundingClientRect();
+        const after = e.clientY > r.top + r.height / 2;
+        if (!el.classList.contains(after ? 'drop-after' : 'drop-before')) { clearDrop(); el.classList.add(after ? 'drop-after' : 'drop-before'); }
+      });
+      el.addEventListener('dragleave', (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove('drop-before', 'drop-after'); });
+      el.addEventListener('drop', (e) => {
+        if (!drag || drag.scope !== scope || drag.key === key) return;
+        e.preventDefault(); e.stopPropagation();
+        const rc = el.getBoundingClientRect(); const after = e.clientY > rc.top + rc.height / 2;
+        const src = drag; drag = null; clearDrop(); setLinked([]);
+        const group = src.linked && src.linked(key).length;
+        runMove(() => src.onMove(key, after), null, group ? src.el.dataset.route : null);
+      });
+      el.addEventListener('keydown', (e) => {
+        if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        const sib = neighbours(el); const i = sib.indexOf(el);
+        const target = sib[i + (e.key === 'ArrowDown' ? 1 : -1)];
+        if (!target) return;
+        const group = linked && linked(target._dnd.key).filter((n) => n !== el).length;
+        runMove(() => onMove(target._dnd.key, e.key === 'ArrowDown'), el.dataset.dndKey, group ? el.dataset.route : null);
+      });
+      return el;
     }
 
     /* ----- acciones contextuales ----- */
@@ -98,8 +163,9 @@
           hd.classList.add('route-head');
           hd.addEventListener('dblclick', () => app.select({ kind: 'path', route: p.path }));
           hd.appendChild(iconBtn('pencil', 'Abrir ruta ' + p.path, (e) => { e.stopPropagation(); app.select({ kind: 'path', route: p.path }); }, 'tiny'));
+          sortable(hd, 'paths', p.path, (target, after) => O.ops.movePath(app.project, p.path, target, after), () => byRoute(p.path));
           frag.appendChild(hd); shown++;
-          if (g.open) rows.filter((r) => r.p === p).forEach((r) => { frag.appendChild(opItem(r)); shown++; });
+          if (g.open) rows.filter((r) => r.p === p).forEach((r) => { frag.appendChild(sortable(opItem(r), 'm:' + p.path, r.m.method, (target, after) => O.ops.moveMethod(app.project, p.path, r.m.method, target, after))); shown++; });
         }
         const mb = more('ops', paths.length, Math.min(paths.length, max)); if (mb) frag.appendChild(mb);
       } else {
@@ -113,23 +179,35 @@
           total += rs.length;
           if (shown >= max) continue;
           const g = groupHead('t:' + tag, tag, rs.length, null);
+          if (declared.includes(tag)) sortable(g.head, 'tags', tag, (target, after) => O.ops.moveTag(app.project, tag, target, after));
           frag.appendChild(g.head); shown++;
-          if (g.open) rs.sort((a, b) => a.p.path.localeCompare(b.p.path) || METHOD_ORDER.indexOf(a.m.method) - METHOD_ORDER.indexOf(b.m.method)).forEach((r) => { if (shown < max) { frag.appendChild(opItem(r, tag)); shown++; } });
+          // Orden de aparicion en el contrato. Entre rutas distintas se mueve la ruta completa.
+          if (g.open) rs.forEach((r) => { if (shown < max) { frag.appendChild(sortable(opItem(r, true), 'tag:' + tag, r.p.path + ' ' + r.m.method, (target, after) => { const sp = target.lastIndexOf(' '); const tr = target.slice(0, sp); const tm = target.slice(sp + 1); return tr === r.p.path ? O.ops.moveMethod(app.project, tr, r.m.method, tm, after) : O.ops.movePath(app.project, r.p.path, tr, after); }, (target) => r.p.methods.length < 2 || (target && target.slice(0, target.lastIndexOf(' ')) === r.p.path) ? [] : byRoute(r.p.path))); shown++; } });
         }
         const mb = more('ops', total, Math.min(total, max)); if (mb) frag.appendChild(mb);
       }
       if (!frag.childNodes.length) frag.appendChild(h('p', { class: 'muted pad' }, state.q ? 'Sin resultados.' : 'Sin operaciones. Crea la primera con "Nueva operación".'));
       return frag;
     }
-    function opItem(r) {
+    /** linkHint: en la vista por tag, marca las operaciones que comparten ruta (se mueven juntas entre rutas). */
+    function opItem(r, linkHint) {
       const sel = { kind: 'operation', route: r.p.path, method: r.m.method };
-      return item(sel, [F.methodBadge(r.m.method), h('span', { class: 'ti-main' }, h('span', { class: 'ti-route' + (r.m.deprecated ? ' deprecated' : '') }, r.p.path), r.m.summary ? h('span', { class: 'ti-sub' }, r.m.summary) : null)], { menu: opMenu(r.p.path, r.m.method), title: r.m.operationId || '' });
+      const peers = linkHint ? r.p.methods.filter((m) => m !== r.m).map((m) => m.method.toUpperCase()) : [];
+      const hint = peers.length ? 'Comparte ruta con ' + peers.join(', ') + ': al moverla a otra ruta se mueven juntas' : '';
+      const b = item(sel, [F.methodBadge(r.m.method), h('span', { class: 'ti-main' }, h('span', { class: 'ti-route' + (r.m.deprecated ? ' deprecated' : '') }, r.p.path), r.m.summary ? h('span', { class: 'ti-sub' }, r.m.summary) : null), peers.length ? h('span', { class: 'ti-link', 'aria-hidden': 'true' }, icon('link'), String(peers.length + 1)) : null], { menu: opMenu(r.p.path, r.m.method), title: [r.m.operationId, hint].filter(Boolean).join('\n') });
+      b.dataset.route = r.p.path;
+      if (hint) b.dataset.hint = hint;
+      if (peers.length) {
+        b.addEventListener('mouseenter', () => { if (!drag) byRoute(r.p.path).forEach((n) => { if (n !== b) n.classList.add('route-peer'); }); });
+        b.addEventListener('mouseleave', () => list.querySelectorAll('.route-peer').forEach((n) => n.classList.remove('route-peer')));
+      }
+      return b;
     }
     function compItems(model, type, key) {
       const items = (model.components[type] || []).filter((c) => match(c.name, c.description, c.type));
       const max = state.limit[key] || CHUNK;
       const frag = document.createDocumentFragment();
-      items.slice(0, max).forEach((c) => frag.appendChild(item({ kind: 'component', type, name: c.name }, [h('span', { class: 'kind-dot k-' + type }), h('span', { class: 'ti-main' }, h('span', { class: 'ti-route' }, c.name), c.type || c.description ? h('span', { class: 'ti-sub' }, c.ref ? '\u2192 ' + c.ref : (c.type || '') + (c.description ? ' · ' + c.description : '')) : null)], { menu: compMenu(type, c.name) })));
+      items.slice(0, max).forEach((c) => frag.appendChild(sortable(item({ kind: 'component', type, name: c.name }, [h('span', { class: 'kind-dot k-' + type }), h('span', { class: 'ti-main' }, h('span', { class: 'ti-route' }, c.name), c.type || c.description ? h('span', { class: 'ti-sub' }, c.ref ? '\u2192 ' + c.ref : (c.type || '') + (c.description ? ' · ' + c.description : '')) : null)], { menu: compMenu(type, c.name) }), 'c:' + type, c.name, (target, after) => O.ops.moveComponent(app.project, type, c.name, target, after))));
       const mb = more(key, items.length, Math.min(max, items.length)); if (mb) frag.appendChild(mb);
       return { frag, count: items.length };
     }

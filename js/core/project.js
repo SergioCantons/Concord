@@ -420,11 +420,30 @@
         }
       }
       for (const [p, f] of this.files) m.files.push({ path: p, isRoot: p === this.rootFile, errors: f.errors.filter((x) => x.severity === 'error').length, draft: !!f.draft });
-      m.files.sort((a, b) => (b.isRoot - a.isRoot) || a.path.localeCompare(b.path));
+      const rank = this.fileOrder();
+      m.files.sort((a, b) => (rank.has(a.path) ? rank.get(a.path) : Infinity) - (rank.has(b.path) ? rank.get(b.path) : Infinity) || a.path.localeCompare(b.path));
       this._cache.model = m;
       return m;
     }
     _scalar(map, key) { const p = findPair(map, key); return p && isScalar(p.value) ? p.value.value : undefined; }
+    /** Orden de aparicion de los ficheros: recorrido en profundidad desde el raiz siguiendo los $ref en orden de documento. */
+    fileOrder() {
+      const byFile = new Map();
+      for (const r of this.refIndex()) {
+        const tf = r.target && (r.target.litFile || r.target.file);
+        if (!tf || tf === r.file) continue;
+        if (!byFile.has(r.file)) byFile.set(r.file, []);
+        byFile.get(r.file).push(tf);
+      }
+      const rank = new Map();
+      const visit = (f) => {
+        if (rank.has(f) || !this.files.has(f)) return;
+        rank.set(f, rank.size);
+        (byFile.get(f) || []).forEach(visit);
+      };
+      visit(this.rootFile);
+      return rank;
+    }
 
     /* ---------- Historial ---------- */
     _restore(texts, rootFile) {
@@ -604,6 +623,28 @@
       const j = i + delta;
       if (i < 0 || j < 0 || j >= cont.items.length) return;
       this._touch(parent.file);
+      const [it] = cont.items.splice(i, 1);
+      cont.items.splice(j, 0, it);
+    }
+    /** Mueve una clave (mapa) o un indice (secuencia) justo antes o despues de otra. */
+    moveTo(parentLogical, keyOrIndex, targetKeyOrIndex, after) {
+      const parent = this._need(parentLogical, true);
+      const cont = this.p.getNodeAt(parent.file, parent.path);
+      if (!isMap(cont) && !isSeq(cont)) throw new Error('No se puede reordenar');
+      const find = (k) => isMap(cont) ? cont.items.findIndex((it) => isPair(it) && String(keyOf(it)) === String(k)) : Number(k);
+      const i = find(keyOrIndex);
+      const t = find(targetKeyOrIndex);
+      const n = cont.items.length;
+      if (!(i >= 0 && i < n) || !(t >= 0 && t < n) || i === t) return;
+      const j = t - (i < t ? 1 : 0) + (after ? 1 : 0);
+      if (j === i) return;
+      this._touch(parent.file);
+      // El comentario previo al primer elemento lo guarda la coleccion: se pasa al elemento para que viaje con el.
+      if (cont.commentBefore && (i === 0 || j === 0)) {
+        const first = cont.items[0];
+        const anchor = isPair(first) ? first.key : first;
+        if (YAML.isNode(anchor)) { anchor.commentBefore = cont.commentBefore + (anchor.commentBefore ? '\n' + anchor.commentBefore : ''); cont.commentBefore = undefined; }
+      }
       const [it] = cont.items.splice(i, 1);
       cont.items.splice(j, 0, it);
     }
