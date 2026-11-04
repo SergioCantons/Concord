@@ -491,7 +491,10 @@
           this._setFile(p, stringifyDoc(f.doc, f.eol));
         }
       } catch (err) {
+        // Los AST ya editados en memoria no cambian su texto hasta el final: se vuelven a leer del estado previo.
+        for (const p of tx.touched) if (before.has(p)) this._setFile(p, before.get(p));
         this._restore(before, beforeRoot);
+        this._cache = {};
         throw err;
       }
       let changed = false;

@@ -13,7 +13,7 @@
   function create(app) {
     const el = h('div', { class: 'compare-view' });
     const head = h('div', { class: 'seg view-seg', role: 'tablist', 'aria-label': 'Vista de la comparación' });
-    const S = app.cmp = app.cmp || { base: null, next: null, result: null, running: false, filters: { kinds: new Set(['added', 'removed', 'modified', 'renamed', 'moved', 'error']), breaking: 'all', q: '', tag: '', method: '', area: '' }, selId: null, view: 'form', xMode: 'informative', textPair: {} };
+    const S = app.cmp = app.cmp || { base: null, next: null, result: null, running: false, filters: { kinds: new Set(['added', 'removed', 'modified', 'renamed', 'moved', 'error']), breaking: 'all', q: '', tag: '', method: '', area: '' }, selId: null, view: 'form', xMode: 'informative', textPair: {}, picked: new Set() };
     let content = null;
     // Un fichero soltado fuera de las tarjetas no debe hacer que el navegador lo abra y abandone la aplicación.
     document.addEventListener('dragover', (e) => { if (app.mode === 'compare' && !e.defaultPrevented && hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; } });
@@ -39,7 +39,7 @@
       const card = h('div', { class: 'cmp-side' });
       card.appendChild(h('h3', null, title));
       const info = side
-        ? h('div', { class: 'cmp-info' }, h('strong', null, side.label), h('span', { class: 'muted' }, side.project.files.size + ' fichero(s) · raíz ' + side.project.rootFile), side.errors ? h('span', { class: 'badge err' }, side.errors + ' error(es)') : h('span', { class: 'badge ok' }, 'Referencias resueltas'))
+        ? h('div', { class: 'cmp-info' }, h('strong', null, side.label), h('span', { class: 'muted' }, side.project.files.size + ' fichero(s) · raíz ' + side.project.rootFile), h('div', { class: 'row wrap' }, side.errors ? h('span', { class: 'badge err' }, side.errors + ' error(es)') : h('span', { class: 'badge ok' }, 'Referencias resueltas'), merges(side) ? h('span', { class: 'badge warn', title: 'Tiene cambios trasladados desde el otro contrato que aún no se han guardado' }, 'Modificado por la fusión') : null))
         : h('div', { class: 'muted' }, 'Sin contrato seleccionado');
       card.appendChild(info);
       const actions = h('div', { class: 'row wrap' },
@@ -68,11 +68,24 @@
         load(which, () => O.fileio.readDropped(drop));
       });
     }
-    function describe(project, label) {
-      const errors = project.refIndex().filter((r) => r.error).length + Array.from(project.files.values()).reduce((n, f) => n + f.errors.filter((e) => e.severity === 'error').length, 0);
-      return { project, label, errors };
+    const countErrors = (project) => project.refIndex().filter((r) => r.error).length + Array.from(project.files.values()).reduce((n, f) => n + f.errors.filter((e) => e.severity === 'error').length, 0);
+    /** extra: folder (para guardar en su sitio al abrirlo en el editor), fromCurrent (proyecto del editor del que es copia), example. */
+    function describe(project, label, extra) {
+      return Object.assign({ project, label, errors: countErrors(project) }, extra || {});
+    }
+    const MERGE_RE = /^(Incorporar|Revertir) \d+ cambio/;
+    /** Fusiones pendientes de guardar en un lado (las del historial de deshacer, si tiene cambios sin guardar). */
+    function merges(side) { return side && side.project.isDirty() ? side.project.past.filter((p) => MERGE_RE.test(p.label)).length : 0; }
+    /** Vuelca el borrador del editor si alguno de los lados es el contrato abierto en él. */
+    function flushEditor() { if (app.yaml && ((S.base && S.base.project === app.project) || (S.next && S.next.project === app.project))) app.yaml.flush(); }
+    function confirmDiscardMerges(which) {
+      const side = S[which];
+      // Si ya está abierto en el editor, sus cambios siguen allí al sustituirlo en la comparación.
+      if (!merges(side) || side.project === app.project) return Promise.resolve(true);
+      return app.confirm({ title: 'Descartar la fusión', message: 'El ' + (which === 'base' ? 'contrato base' : 'contrato comparado') + ' tiene cambios trasladados sin guardar. Si lo sustituyes se perderán.', confirmLabel: 'Descartar', danger: true });
     }
     async function load(which, read) {
+      if (!(await confirmDiscardMerges(which))) return;
       try {
         const r = await read();
         if (!r) return;
@@ -81,22 +94,121 @@
         const root = await app.chooseRoot(r.files);
         if (!root) return;
         const p = O.project.Project.fromFiles(r.files, root, r.folderName || O.util.basename(root));
-        S[which] = describe(p, (r.folderName ? r.folderName + '/' : '') + root);
+        S[which] = describe(p, (r.folderName ? r.folderName + '/' : '') + root, { folder: r.handle ? { handle: r.handle, name: r.folderName } : null });
         const recent = app.recentEntry(r);
         if (recent) O.fileio.addRecent(Object.assign({ rootFile: root, name: r.folderName || O.util.basename(root).replace(/\.(ya?ml|json)$/i, '') }, recent));
         S.result = null; render();
       } catch (e) { app.toast('No se pudo abrir: ' + e.message, 'error'); }
     }
-    function useCurrent(which) {
+    async function useCurrent(which) {
+      if (!(await confirmDiscardMerges(which))) return;
       if (app.yaml) app.yaml.flush();
-      const p = O.project.Project.fromFiles(app.project.texts(), app.project.rootFile, app.project.name);
-      S[which] = describe(p, app.project.name + ' (contrato abierto)');
+      const cur = app.project;
+      const p = O.project.Project.fromFiles(cur.texts(), cur.rootFile, cur.name);
+      // La copia conserva la referencia de "guardado" y la configuración del original para poder sustituirlo después.
+      p.original = new Map(cur.original); p.extras = new Map(cur.extras); p.extrasOriginal = new Map(cur.extrasOriginal);
+      p.past = cur.past.slice();
+      if (cur.hasDraft()) app.toast('El contrato abierto tiene un borrador YAML con errores: la comparación usa su último estado válido.', 'info', 5000);
+      S[which] = describe(p, cur.name + ' (contrato abierto)', { folder: app.folder, fromCurrent: cur, srcVersion: cur.version, example: !!cur.isExample });
       S.result = null; render();
     }
-    function useExample(which, key) {
+    async function useExample(which, key) {
+      if (!(await confirmDiscardMerges(which))) return;
       const ex = O.EXAMPLES[key];
-      S[which] = describe(O.project.Project.fromFiles(ex.files, ex.root, ex.title), ex.title);
+      S[which] = describe(O.project.Project.fromFiles(ex.files, ex.root, ex.title), ex.title, { example: true });
       S.result = null; render();
+    }
+
+    /* ---------- Fusión: trasladar cambios de un contrato a otro ---------- */
+    const SIDE_NAME = { base: 'base', next: 'comparado' };
+    const mergeable = (c) => O.merge.MERGEABLE.has(c.kind);
+    /** fromNext=true: el base adopta la versión del comparado; false: el comparado vuelve a la versión del base. */
+    function applyMerge(ids, fromNext) {
+      const changes = S.result.changes.filter((c) => ids.includes(c.id) && mergeable(c));
+      if (!changes.length) return;
+      const which = fromNext ? 'base' : 'next';
+      const target = S[which]; const source = S[fromNext ? 'next' : 'base'];
+      flushEditor();
+      let res;
+      try {
+        res = O.merge.applyChanges(target.project, source.project, changes, { fromNext, label: (fromNext ? 'Incorporar ' : 'Revertir ') + changes.length + ' cambio(s) de la comparación' });
+      } catch (e) { app.toast('No se pudo fusionar: ' + e.message, 'error'); return; }
+      target.errors = countErrors(target.project);
+      S.picked.clear();
+      const parts = [(fromNext ? 'Incorporado(s) al base: ' : 'Revertido(s) en el comparado: ') + res.applied.length + ' cambio(s)'];
+      if (res.deps.length) parts.push('también se copiaron ' + res.deps.join(', '));
+      if (res.skipped.length) parts.push(res.skipped.length + ' omitido(s): ' + res.skipped[0].reason);
+      if (res.brokenRefs) parts.push('quedan ' + res.brokenRefs + ' referencia(s) sin resolver; revisa los elementos que aún las usan');
+      app.toast(parts.join('. ') + '.', res.brokenRefs || !res.applied.length ? 'error' : 'ok', 6000);
+      run();
+    }
+    function undoMerge(which) {
+      const side = S[which];
+      if (!side) return;
+      flushEditor();
+      const last = side.project.past[side.project.past.length - 1];
+      if (!last || !MERGE_RE.test(last.label)) { app.toast('La última edición del ' + SIDE_NAME[which] + ' no es una fusión' + (last ? ' («' + last.label + '»); deshazla desde el editor.' : '.'), 'error', 5000); return; }
+      const l = side.project.undo();
+      if (!l) return;
+      side.errors = countErrors(side.project);
+      app.toast('Deshecho en el ' + SIDE_NAME[which] + ': ' + l, 'info', 2500);
+      if (S.result) run(); else render();
+    }
+    /** Abre el contrato fusionado en el editor para revisarlo y guardarlo. */
+    function openInEditor(which) {
+      const side = S[which];
+      if (!side) return;
+      const open = () => {
+        app.loadProject(side.project, { folder: side.folder || null, example: !!side.example });
+        side.fromCurrent = side.project; side.srcVersion = side.project.version;
+        app.toast('Contrato ' + SIDE_NAME[which] + ' abierto en el editor: revisa los cambios y guárdalo.', 'ok', 4000);
+      };
+      if (side.project === app.project) { app.setMode('edit'); return; }
+      // Si es copia del contrato abierto y este no ha cambiado, la copia lo sustituye sin perder nada.
+      if (side.fromCurrent && side.fromCurrent === app.project && app.project.version === side.srcVersion && !app.project.hasDraft()) { open(); return; }
+      if (side.fromCurrent && side.fromCurrent === app.project) {
+        app.confirm({ title: 'El contrato abierto ha cambiado', message: 'Has editado el contrato abierto después de usarlo en la comparación. La versión fusionada no incluye esas ediciones: si la abres, se descartarán.', confirmLabel: 'Continuar', danger: true }).then((ok) => { if (ok) app.guarded(open); });
+        return;
+      }
+      app.guarded(open);
+    }
+    function downloadSide(which) {
+      const side = S[which];
+      flushEditor();
+      const files = new Map(side.project.texts());
+      side.project.extras.forEach((t, p) => files.set(p, t));
+      if (files.size === 1) O.fileio.downloadText(side.project.rootFile.split('/').pop(), files.get(side.project.rootFile), 'application/yaml;charset=utf-8');
+      else O.fileio.downloadZip((side.project.name || 'contrato') + '.zip', files);
+    }
+    function mergeBanner() {
+      const sides = ['base', 'next'].filter((w) => merges(S[w]));
+      if (!sides.length) return null;
+      return h('div', { class: 'merge-banner' }, sides.map((w) => h('div', { class: 'merge-banner-row' },
+        icon('git-compare'),
+        h('span', { class: 'grow' }, h('strong', null, 'Contrato ' + SIDE_NAME[w] + ': '), merges(S[w]) + ' fusión(es) aplicada(s) sin guardar. ', h('span', { class: 'muted' }, S[w].project === app.project ? 'Está abierto en el editor: guárdalo desde allí.' : 'Ábrelo en el editor para revisarlo y guardarlo, o descárgalo.')),
+        btn('Deshacer', () => undoMerge(w), 'small', 'undo-2', { title: 'Deshace la última fusión aplicada al ' + SIDE_NAME[w] }),
+        btn('Abrir en el editor', () => openInEditor(w), 'small primary', 'external-link'),
+        btn('Descargar', () => downloadSide(w), 'small', 'download'))));
+    }
+    /** Barra de selección múltiple sobre la lista de cambios. */
+    function mergeBar() {
+      const visible = () => filtered().filter(mergeable);
+      const all = h('input', { type: 'checkbox', 'aria-label': 'Seleccionar todos los cambios visibles' });
+      const count = h('span', { class: 'muted', 'aria-live': 'polite' });
+      const toBase = btn('\u2190 Incorporar al base', () => applyMerge(Array.from(S.picked), true), 'small primary', null, { title: 'Copia en el contrato base la versión del comparado de los cambios seleccionados' });
+      const toNext = btn('Revertir en el comparado \u2192', () => applyMerge(Array.from(S.picked), false), 'small', null, { title: 'Deshace en el contrato comparado los cambios seleccionados, restaurando la versión del base' });
+      const update = () => {
+        const vis = visible();
+        const n = vis.filter((c) => S.picked.has(c.id)).length;
+        all.checked = vis.length > 0 && n === vis.length; all.indeterminate = n > 0 && n < vis.length; all.disabled = !vis.length;
+        const hidden = S.picked.size - n;
+        count.textContent = S.picked.size ? S.picked.size + ' seleccionado(s)' + (hidden ? ' (' + hidden + ' ocultos por los filtros)' : '') : 'Selecciona cambios para trasladarlos de un contrato a otro';
+        toBase.disabled = toNext.disabled = !S.picked.size;
+      };
+      all.addEventListener('change', () => { const vis = visible(); if (all.checked) vis.forEach((c) => S.picked.add(c.id)); else vis.forEach((c) => S.picked.delete(c.id)); fillBody(); });
+      S._updateMergeBar = update;
+      update();
+      return h('div', { class: 'row wrap merge-bar' }, h('label', { class: 'check' }, all, h('span', null, 'Todos los visibles')), count, h('span', { class: 'spacer' }), toBase, toNext);
     }
 
     async function run() {
@@ -104,8 +216,13 @@
       S.running = true; render();
       await new Promise((r) => setTimeout(r, 40));
       try {
+        flushEditor();
         S.result = O.compare.compareProjects(S.base.project, S.next.project, { xMode: S.xMode });
+        S.resultVersions = [S.base.project.version, S.next.project.version];
         S.selId = null;
+        // Los id de los cambios son posicionales: una selección anterior apuntaría a otros cambios.
+        S.picked.clear();
+        S.planCache = new Map();
       } catch (e) { app.toast('Error al comparar: ' + e.message, 'error'); S.result = null; }
       S.running = false; render();
     }
@@ -119,12 +236,17 @@
         && (!q || (c.title + ' ' + c.pathText + ' ' + (c.route || '') + ' ' + (c.schema || '') + ' ' + (c.tags || []).join(' ')).toLowerCase().includes(q)));
     }
 
+    /** El resultado se queda obsoleto si un lado se edita (p. ej. en el editor) después de comparar. */
+    function stale() { return !!(S.result && S.resultVersions && S.base && S.next && (S.base.project.version !== S.resultVersions[0] || S.next.project.version !== S.resultVersions[1])); }
     function render() {
+      if (stale() && !S.running) { S.result = null; setTimeout(run, 0); }
       el.textContent = '';
       el.appendChild(h('div', { class: 'cmp-top' },
         sourceCard('base', 'Contrato base'),
         h('div', { class: 'cmp-mid' }, iconBtn('arrow-left-right', 'Intercambiar base y comparado', () => { const t = S.base; S.base = S.next; S.next = t; S.result = null; render(); }), btn('Comparar', run, 'primary', 'git-compare', { disabled: !S.base || !S.next || S.running })),
         sourceCard('next', 'Contrato comparado')));
+      const banner = mergeBanner();
+      if (banner) el.appendChild(banner);
       const opts = h('div', { class: 'row wrap cmp-opts' }, F.field('Extensiones x-*', (() => { const s = h('select', { 'aria-label': 'Tratamiento de extensiones x-*' }, h('option', { value: 'informative' }, 'Informativas'), h('option', { value: 'blocking' }, 'Bloqueantes (incompatibles)'), h('option', { value: 'ignore' }, 'Ignorar')); s.value = S.xMode; s.addEventListener('change', () => { S.xMode = s.value; if (S.result) run(); }); return s; })()));
       el.appendChild(opts);
       content = h('div', { class: 'cmp-content' });
@@ -170,6 +292,7 @@
       const exp = btn('Exportar', (e) => showMenu(e.currentTarget, [
         { label: 'Markdown (.md)', icon: 'file-text', onClick: () => exportAs('md') }, { label: 'HTML (.html)', icon: 'file-code', onClick: () => exportAs('html') }, { label: 'JSON (.json)', icon: 'braces', onClick: () => exportAs('json') }]), '', 'download');
       wrap.appendChild(h('div', { class: 'row wrap cmp-filters' }, q, brk, sel('Todos los tags', 'tag', tags), sel('Todos los métodos', 'method', O.util.HTTP_METHODS), sel('Todas las áreas', 'area', areas), h('span', { class: 'spacer' }), exp));
+      wrap.appendChild(mergeBar());
       const body = h('div', { class: 'cmp-body' });
       wrap.appendChild(body);
       S._body = body;
@@ -186,6 +309,7 @@
       const body = S._body;
       body.textContent = '';
       const list = filtered();
+      if (S._updateMergeBar) S._updateMergeBar();
       const groups = new Map();
       const add = (g, c) => { if (!groups.has(g)) groups.set(g, []); groups.get(g).push(c); };
       list.forEach((c) => { if (c.route) add('Endpoints \u203A ' + c.route + (c.method ? ' ' + c.method.toUpperCase() : ''), c); else if (c.schema) add('Schemas \u203A ' + c.schema, c); else if (c.kind === 'error') add('Errores', c); else if (c.section === 'components') add('Otros componentes', c); else add('Contrato (info, servidores, tags, seguridad)', c); });
@@ -197,7 +321,15 @@
         tree.appendChild(h('div', { class: 'group-head static' }, h('span', { class: 'group-name' }, g), h('span', { class: 'count' }, String(items.length))));
         items.forEach((c) => {
           shown++;
-          const row = h('div', { class: 'tree-item change ' + c.kind + (S.selId === c.id ? ' selected' : ''), role: 'treeitem', tabindex: 0 }, h('span', { class: 'kglyph k-' + c.kind, title: KIND[c.kind][1] }, KIND[c.kind][0]), h('span', { class: 'ti-main' }, h('span', { class: 'ti-route' }, c.title), h('span', { class: 'ti-sub' }, c.pathText)), c.breaking ? h('span', { class: 'badge err', title: c.reason }, 'incompat.') : null);
+          let chk = null;
+          if (mergeable(c)) {
+            chk = h('input', { type: 'checkbox', class: 'merge-check', 'aria-label': 'Seleccionar para fusionar: ' + c.title });
+            chk.checked = S.picked.has(c.id);
+            chk.addEventListener('click', (e) => e.stopPropagation());
+            chk.addEventListener('keydown', (e) => e.stopPropagation());
+            chk.addEventListener('change', () => { if (chk.checked) S.picked.add(c.id); else S.picked.delete(c.id); if (S._updateMergeBar) S._updateMergeBar(); });
+          }
+          const row = h('div', { class: 'tree-item change ' + c.kind + (S.selId === c.id ? ' selected' : ''), role: 'treeitem', tabindex: 0 }, chk, h('span', { class: 'kglyph k-' + c.kind, title: KIND[c.kind][1] }, KIND[c.kind][0]), h('span', { class: 'ti-main' }, h('span', { class: 'ti-route' }, c.title), h('span', { class: 'ti-sub' }, c.pathText)), c.breaking ? h('span', { class: 'badge err', title: c.reason }, 'incompat.') : null);
           const pick = () => { S.selId = c.id; fillBody(); };
           row.addEventListener('click', pick);
           row.addEventListener('keydown', (e) => { if (e.key === 'Enter') pick(); });
@@ -217,10 +349,38 @@
       box.appendChild(h('div', { class: 'detail-head' }, h('span', { class: 'kglyph k-' + c.kind }, KIND[c.kind][0]), h('h3', null, c.title)));
       box.appendChild(h('div', { class: 'row wrap' }, h('span', { class: 'badge kind' }, KIND[c.kind][1]), h('span', { class: 'badge kind' }, c.area), c.breaking ? h('span', { class: 'badge err' }, 'Potencialmente incompatible') : h('span', { class: 'badge ok' }, 'No incompatible'), c.route ? h('code', null, (c.method ? c.method.toUpperCase() + ' ' : '') + c.route) : null, c.schema ? h('code', null, 'schema ' + c.schema) : null));
       if (c.reason) box.appendChild(h('p', null, c.reason));
+      if (mergeable(c) && S.base && S.next) box.appendChild(mergeDetail(c));
       if (c.breaking) box.appendChild(h('p', { class: 'muted' }, 'Clasificación orientativa según el contexto de uso; no es una garantía de compatibilidad.'));
       box.appendChild(h('div', { class: 'row wrap' }, h('code', { class: 'path-code' }, c.pathText), btn('Copiar ruta', () => copy(c.pathText), 'small', 'copy'), btn('Copiar id', () => copy(c.id), 'small', 'copy')));
       box.appendChild(h('div', { class: 'old-new' }, h('div', null, h('h4', null, 'Antes (base)'), highlightedBlock(yamlOf(c.old))), h('div', null, h('h4', null, 'Ahora (comparado)'), highlightedBlock(yamlOf(c.new)))));
       return box;
+    }
+    /** Qué haría la fusión de un cambio en cada sentido (se calcula una vez por comparación). */
+    function planFor(c) {
+      if (!S.planCache) S.planCache = new Map();
+      if (!S.planCache.has(c.id)) {
+        let p;
+        try { p = { toBase: O.merge.planChanges(S.base.project, S.next.project, [c], { fromNext: true })[0], toNext: O.merge.planChanges(S.next.project, S.base.project, [c], { fromNext: false })[0] }; }
+        catch (e) { p = { toBase: { skip: e.message }, toNext: { skip: e.message } }; }
+        S.planCache.set(c.id, p);
+      }
+      return S.planCache.get(c.id);
+    }
+    function mergeDetail(c) {
+      const plan = planFor(c);
+      const what = (p, sideName) => {
+        if (p.skip) return h('span', { class: 'muted' }, p.skip);
+        if (p.action === 'rename') return ['Renombra en el ' + sideName + ' ', h('code', null, p.scope), ' y actualiza sus referencias.'];
+        if (p.action === 'move') return ['Mueve en el ' + sideName + ' la operación ', h('code', null, p.scope), '.'];
+        return ['Copia al ' + sideName + ' ', h('code', null, p.scope), ' completo y, si hace falta, los componentes y tags que use.'];
+      };
+      const line = (button, p, sideName) => h('div', { class: 'merge-option' }, button, h('span', { class: 'merge-what' }, what(p, sideName)));
+      const toBase = btn('\u2190 Incorporar al base', () => applyMerge([c.id], true), 'small primary', null, { disabled: !!plan.toBase.skip });
+      const toNext = btn('Revertir en el comparado \u2192', () => applyMerge([c.id], false), 'small', null, { disabled: !!plan.toNext.skip });
+      return h('div', { class: 'merge-detail' }, h('h4', null, 'Fusionar'),
+        line(toBase, plan.toBase, 'base'),
+        line(toNext, plan.toNext, 'comparado'),
+        h('p', { class: 'muted small' }, 'Cada fusión se puede deshacer desde el aviso superior.'));
     }
     function highlightedBlock(text) {
       const pre = h('pre', { class: 'code-block' }, text);
