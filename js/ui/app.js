@@ -10,7 +10,7 @@
   function loadSettings() { try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) { return Object.assign({}, DEFAULTS); } }
 
   const app = (O.app = {
-    project: null, sel: { kind: 'info' }, mode: 'edit', view: 'form', tabMemory: {}, folder: null, yamlFile: null,
+    project: null, sel: { kind: 'info' }, mode: 'edit', view: 'form', tabMemory: {}, folder: null, target: null, yamlFile: null,
     settings: loadSettings(), busyCount: 0, panelOpen: window.innerWidth > 900, validation: { result: null, running: false }, cmp: null
   });
   const $ = (id) => document.getElementById(id);
@@ -188,7 +188,8 @@
       h('div', { class: 'tool-group' },
         iconBtn('file-plus', 'Nuevo contrato', (e) => showMenu(e.currentTarget, newMenuItems())),
         iconBtn('folder-open', 'Abrir contrato', (e) => openMenu(e.currentTarget)),
-        iconBtn('save', 'Guardar contrato', () => O.saveUI.open(app), 'primary-soft')),
+        iconBtn('save', app.target ? 'Guardar en ' + O.saveUI.describeTarget(app.target) + ' (Ctrl+S)' : 'Guardar... (Ctrl+S): elige dónde la primera vez', () => O.saveUI.save(app), 'primary-soft'),
+        iconBtn('package', 'Exportar: documento único, fragments o copia (Ctrl+Mayús+S)', () => O.saveUI.openExport(app))),
       h('div', { class: 'tool-group' }, iconBtn('undo-2', 'Deshacer', () => doUndo(), '', { disabled: !P.canUndo() }), iconBtn('redo-2', 'Rehacer', () => doRedo(), '', { disabled: !P.canRedo() })),
       h('div', { class: 'tool-group' }, val,
         iconBtn('git-compare', 'Comparar contratos', () => app.setMode(app.mode === 'compare' ? 'edit' : 'compare'), app.mode === 'compare' ? 'active' : ''),
@@ -297,7 +298,8 @@
     if (app.unsubscribe) app.unsubscribe();
     app.project = project;
     if (o.saved) project.markSaved();
-    app.folder = o.folder || null;
+    // Dónde se guarda: carpeta, ficheros sueltos o (null) se pregunta al guardar por primera vez.
+    O.saveUI.setTarget(app, o.target || (o.folder ? { kind: 'folder', handle: o.folder.handle, name: o.folder.name } : null));
     project.isExample = !!o.example;
     app.unsubscribe = project.onChange(onProjectChanged);
     app.sel = { kind: 'info' }; app.tabMemory = {}; app.view = 'form'; app.yamlFile = null;
@@ -334,10 +336,11 @@
     const root = await app.chooseRoot(r.files);
     if (!root) return;
     const proj = Project.fromFiles(r.files, root, r.folderName || O.util.basename(root).replace(/\.(ya?ml|json)$/i, ''));
-    const folder = r.handle ? { handle: r.handle, name: r.folderName } : null;
-    app.loadProject(proj, { folder, saved: true, recent: app.recentEntry(r) });
+    const target = O.saveUI.targetFromResult(r);
+    app.loadProject(proj, { target, saved: true, recent: app.recentEntry(r) });
     if (r.skipped && r.skipped.length) toast('Se omitieron ' + r.skipped.length + ' fichero(s) demasiado grandes', 'info');
-    if (!folder) toast('Este navegador no permite escribir en carpetas: al guardar se descargará un ZIP.', 'info', 5000);
+    if (!O.fileio.hasFsAccess) toast('Este navegador no permite escribir ficheros: al guardar se descargarán.', 'info', 5000);
+    else if (!target) toast('Al guardar se te pedirá dónde hacerlo (no hay acceso de escritura a lo abierto).', 'info', 5000);
   }
   async function openFolderFlow() {
     app.busy(true);
@@ -381,10 +384,10 @@
   async function guarded(action) {
     if (app.yaml) app.yaml.flush();
     if (!app.project || !app.project.isDirty()) return action();
-    const m = modal({ title: 'Cambios sin guardar', content: h('p', null, 'El contrato "' + app.project.name + '" tiene cambios sin guardar. Si continúas, se perderán (esta operación no se puede deshacer).'), cancelValue: 'cancel', actions: [{ label: 'Cancelar', value: 'cancel' }, { label: 'Guardar...', value: 'save' }, { label: 'Descartar cambios', kind: 'danger', value: 'discard' }] });
+    const m = modal({ title: 'Cambios sin guardar', content: h('p', null, 'El contrato "' + app.project.name + '" tiene cambios sin guardar. Si continúas, se perderán (esta operación no se puede deshacer).'), cancelValue: 'cancel', actions: [{ label: 'Cancelar', value: 'cancel' }, { label: 'Guardar', value: 'save' }, { label: 'Descartar cambios', kind: 'danger', value: 'discard' }] });
     const r = await m.promise;
     if (r === 'discard') return action();
-    if (r === 'save') { await O.saveUI.open(app); if (!app.project.isDirty()) return action(); }
+    if (r === 'save') { await O.saveUI.save(app); if (!app.project.isDirty()) return action(); }
     return undefined;
   }
   app.guarded = guarded;
@@ -411,7 +414,7 @@
   document.addEventListener('keydown', (e) => {
     const t = e.target; const inText = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
     if (!app.project) return;
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (app.mode === 'edit') O.saveUI.open(app); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (app.mode === 'edit') { if (e.shiftKey) O.saveUI.openExport(app); else O.saveUI.save(app); } }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (app.mode === 'edit') { document.body.classList.add('sidebar-open'); app.explorer.focusSearch(); } }
     else if ((e.ctrlKey || e.metaKey) && !inText && e.key.toLowerCase() === 'z' && !e.shiftKey && app.mode === 'edit') { e.preventDefault(); doUndo(); }
     else if ((e.ctrlKey || e.metaKey) && !inText && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) && app.mode === 'edit') { e.preventDefault(); doRedo(); }

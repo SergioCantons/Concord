@@ -10,6 +10,7 @@
 
   const hasFsAccess = typeof window.showDirectoryPicker === 'function';
   const hasFilePicker = typeof window.showOpenFilePicker === 'function';
+  const hasSaveFilePicker = typeof window.showSaveFilePicker === 'function';
 
   /** Comprueba que una ruta relativa no escapa de la carpeta elegida y es valida en Windows. */
   function safePath(p) {
@@ -70,8 +71,12 @@
    */
   async function readDropped(drop) {
     const hasDir = drop.entries.some((e) => e.isDirectory);
-    if (!hasDir) return readFileList(drop.files);
     const handles = (await Promise.all(drop.handles)).filter(Boolean);
+    if (!hasDir) {
+      // Con identificadores (Chromium) los ficheros soltados se pueden volver a guardar en su sitio.
+      if (handles.length && handles.every((x) => x.kind === 'file')) { try { return await readFileHandles(handles); } catch (e) { /* se leen sin identificador */ } }
+      return readFileList(drop.files);
+    }
     if (handles.length) {
       try { return await readDroppedHandles(handles); } catch (e) { /* se intenta con las entradas */ }
     }
@@ -82,7 +87,7 @@
   }
   async function readDroppedHandles(handles) {
     const single = handles.length === 1 && handles[0].kind === 'directory' ? handles[0] : null;
-    if (single) return Object.assign(await readDirHandle(single), { folderName: single.name });
+    if (single) return Object.assign(await readDirHandle(single), { handle: single, folderName: single.name });
     const files = new Map(); const skipped = [];
     for (const hd of handles) {
       if (hd.kind === 'directory') {
@@ -201,6 +206,51 @@
     };
   }
 
+  /** E/S sobre ficheros sueltos (identificadores por ruta del proyecto); no puede crear ficheros nuevos. */
+  function filesIo(handles) {
+    const get = (p) => { const hd = handles.get(p); if (!hd) throw new Error('No hay acceso al fichero ' + p); return hd; };
+    return {
+      async exists(p) { return handles.has(p); },
+      async read(p) { return (await get(p).getFile()).text(); },
+      async write(p, text) {
+        const w = await get(p).createWritable();
+        try { await w.write(text); await w.close(); } catch (e) { try { await w.abort(); } catch (e2) { /* ignore */ } throw e; }
+      },
+      async remove(p) { throw new Error('No se puede eliminar ' + p + ' sin acceso a su carpeta'); }
+    };
+  }
+
+  /* ---------- Permisos de escritura ---------- */
+  /**
+   * Estado del permiso de escritura de un identificador; con request=true lo pide al navegador si hace falta
+   * (requiere un gesto reciente del usuario). Devuelve 'granted' | 'prompt' | 'denied' | 'error'.
+   */
+  async function writePermission(handle, request) {
+    try {
+      const opts = { mode: 'readwrite' };
+      let st = await handle.queryPermission(opts);
+      if (st !== 'granted' && request) st = await handle.requestPermission(opts);
+      return st;
+    } catch (e) { return 'error'; }
+  }
+  /** Pide una carpeta con permiso de escritura (null si se cancela). */
+  async function pickWritableFolder(startIn) {
+    if (!hasFsAccess) return null;
+    try { return await window.showDirectoryPicker(Object.assign({ mode: 'readwrite', id: 'oat-project' }, startIn ? { startIn } : {})); }
+    catch (e) { if (e && e.name === 'AbortError') return null; throw e; }
+  }
+  /** Pide dónde guardar un fichero (null si se cancela). */
+  async function pickSaveFile(suggestedName, startIn) {
+    if (!hasSaveFilePicker) return null;
+    try {
+      return await window.showSaveFilePicker(Object.assign({ suggestedName, id: 'oat-files', types: [{ description: 'Contrato OpenAPI', accept: /\.json$/i.test(suggestedName) ? { 'application/json': ['.json'] } : { 'text/yaml': ['.yaml', '.yml'] } }] }, startIn ? { startIn } : {}));
+    } catch (e) { if (e && e.name === 'AbortError') return null; throw e; }
+  }
+  /** Ruta relativa ('a/b.yaml') de un identificador dentro de una carpeta, o null si no está dentro. */
+  async function relativeIn(dir, handle) {
+    try { const parts = await dir.resolve(handle); return parts ? parts.join('/') : null; } catch (e) { return null; }
+  }
+
   /* ---------- Descargas y ZIP ---------- */
   function download(name, blob) {
     const a = document.createElement('a');
@@ -306,5 +356,5 @@
   function loadRecovery() { try { const v = localStorage.getItem(REC_KEY); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function clearRecovery() { try { localStorage.removeItem(REC_KEY); } catch (e) { /* ignore */ } }
 
-  O.fileio = { hasFsAccess, hasFilePicker, safePath, openFolder, openLooseFiles, readFileList, readDropped, captureDrop, detectRoots, dirIo, download, downloadText, downloadZip, addRecent, listRecents, removeRecent, recentPermission, openRecent, clearRecents, recentKind, saveRecovery, loadRecovery, clearRecovery };
+  O.fileio = { hasFsAccess, hasFilePicker, hasSaveFilePicker, filesIo, writePermission, pickWritableFolder, pickSaveFile, relativeIn, safePath, openFolder, openLooseFiles, readFileList, readDropped, captureDrop, detectRoots, dirIo, download, downloadText, downloadZip, addRecent, listRecents, removeRecent, recentPermission, openRecent, clearRecents, recentKind, saveRecovery, loadRecovery, clearRecovery };
 })();

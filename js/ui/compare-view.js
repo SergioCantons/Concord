@@ -69,7 +69,7 @@
       });
     }
     const countErrors = (project) => project.refIndex().filter((r) => r.error).length + Array.from(project.files.values()).reduce((n, f) => n + f.errors.filter((e) => e.severity === 'error').length, 0);
-    /** extra: folder (para guardar en su sitio al abrirlo en el editor), fromCurrent (proyecto del editor del que es copia), example. */
+    /** extra: target (dónde guardarlo al abrirlo en el editor), fromCurrent (proyecto del editor del que es copia), example. */
     function describe(project, label, extra) {
       return Object.assign({ project, label, errors: countErrors(project) }, extra || {});
     }
@@ -94,7 +94,7 @@
         const root = await app.chooseRoot(r.files);
         if (!root) return;
         const p = O.project.Project.fromFiles(r.files, root, r.folderName || O.util.basename(root));
-        S[which] = describe(p, (r.folderName ? r.folderName + '/' : '') + root, { folder: r.handle ? { handle: r.handle, name: r.folderName } : null });
+        S[which] = describe(p, (r.folderName ? r.folderName + '/' : '') + root, { target: O.saveUI.targetFromResult(r) });
         const recent = app.recentEntry(r);
         if (recent) O.fileio.addRecent(Object.assign({ rootFile: root, name: r.folderName || O.util.basename(root).replace(/\.(ya?ml|json)$/i, '') }, recent));
         S.result = null; render();
@@ -109,7 +109,7 @@
       p.original = new Map(cur.original); p.extras = new Map(cur.extras); p.extrasOriginal = new Map(cur.extrasOriginal);
       p.past = cur.past.slice();
       if (cur.hasDraft()) app.toast('El contrato abierto tiene un borrador YAML con errores: la comparación usa su último estado válido.', 'info', 5000);
-      S[which] = describe(p, cur.name + ' (contrato abierto)', { folder: app.folder, fromCurrent: cur, srcVersion: cur.version, example: !!cur.isExample });
+      S[which] = describe(p, cur.name + ' (contrato abierto)', { target: app.target, fromCurrent: cur, srcVersion: cur.version, example: !!cur.isExample });
       S.result = null; render();
     }
     async function useExample(which, key) {
@@ -159,7 +159,7 @@
       const side = S[which];
       if (!side) return;
       const open = () => {
-        app.loadProject(side.project, { folder: side.folder || null, example: !!side.example });
+        app.loadProject(side.project, { target: side.target || null, example: !!side.example });
         side.fromCurrent = side.project; side.srcVersion = side.project.version;
         app.toast('Contrato ' + SIDE_NAME[which] + ' abierto en el editor: revisa los cambios y guárdalo.', 'ok', 4000);
       };
