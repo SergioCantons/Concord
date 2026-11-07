@@ -40,6 +40,7 @@ The dark palette uses tinted charcoal rather than pure black. Semantic status co
 - App shell: fixed toolbar, two-column workspace, independently scrolling editor panes, and a collapsible validation panel.
 - Responsive breakpoint: 899px switches the explorer to a drawer; 480px compresses the toolbar.
 - Theme control is available as a direct toolbar toggle for quick switching; the settings dialog also retains the System/Light/Dark preference selector.
+- React migration preview (`react.html`): reuses the toolbar, field and callout primitives; its content sits in a centered column up to 720px wide (32/24/40px padding, 20/14/30px below 900px).
 
 ## 5. Components
 
@@ -77,4 +78,4 @@ Mixed strategy: 1px borders establish the dense editor grid, while tonal shifts 
 
 - Target WCAG 2.2 AA: 4.5:1 body text contrast, 3:1 large text, visible keyboard focus, native controls, and reduced-motion support.
 - The interface remains Spanish-only, matching the existing product constraint.
-- Browser visual QA is manual because the repository has no UI test harness; core behavior remains covered by the existing Node test suite.
+- The legacy UI has no automated UI tests and its visual QA is manual; the React migration preview has component tests (Vitest + Testing Library). Core behavior remains covered by the Node test suite.

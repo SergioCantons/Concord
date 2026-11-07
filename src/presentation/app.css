@@ -1,0 +1,7 @@
+/* Vista previa React: contenedor y columna de contenido. El resto de estilos son los de css/base.css y css/layout.css. */
+#root { grid-row: 1 / -1; display: flex; flex-direction: column; min-height: 0; }
+.preview-main { flex: 1; min-height: 0; overflow: auto; }
+.preview { display: flex; flex-direction: column; gap: 20px; width: min(720px, 100%); margin: 0 auto; padding: 32px 24px 40px; }
+@media (max-width: 899px) {
+  .preview { gap: 16px; padding: 20px 14px 30px; }
+}

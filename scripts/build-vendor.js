@@ -24,6 +24,8 @@ async function main() {
     target: 'es2019',
     outfile: path.join(root, 'vendor', 'oat-vendor.js'),
     legalComments: 'none',
+    // Sin tsconfig: esbuild aplicaría el tsconfig.json de la app React (alwaysStrict) a este bundle.
+    tsconfigRaw: {},
     define: { 'process.env.NODE_ENV': '"production"' }
   });
 

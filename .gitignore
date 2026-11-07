@@ -1,1 +1,3 @@
 node_modules/
+dist-react/
+src/domain/core-bridge.mjs
